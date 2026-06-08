@@ -1,0 +1,7 @@
+model_name: qwen2-5omni-3b-unified-20-v3
+
+p: 'inf'
+radius: 20
+neighborhoods_per_batch: 20
+n_col: 512
+n_row: 304

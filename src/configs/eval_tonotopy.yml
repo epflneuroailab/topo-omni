@@ -1,0 +1,28 @@
+run:
+  # Used in figure + summary paths: figures/<run_title>/<category_name>/...
+  run_title: qwen2_5_3b_spatial_task_final_7
+  category_name: tonotopy # {eyluel_faces, marvi_faces, marvi_faces_mixed, words, vocals, vocals_mixed}
+  output_root: results
+  do_pretrained: false
+  overwrite: true
+
+model:
+  run_dir: src/ckpts/qwen2_5_3b_spatial_task_final_7
+  device: cuda
+  neighborhood_dir: src/neighborhoods/model=qwen2-5omni-3b-unified-20-v3_radius=20_neighborhoods=20_coords=42
+
+
+data:
+  mode: audio  # {text, image, audio}
+  stimuli_root: /mnt/u14157_ic_nlp_001_files_nfs/nlpdata1/home/bkhmsi/topoomni/stimuli/tone_bank  # {eyluel_faces_nonfaces, fedorenko_words_nonwords, marvi_faces_nonfaces, marvi_faces_nonfaces_mixed, pernet_vocal_nonvocal, pernet_vocal_nonvocal_mixed}
+  batch_size: 1
+
+  lm_reduce: mean
+  vis_reduce: mean
+
+stats:
+  alpha: 0.05
+  topk_pct: 0
+  smooth: true
+  fwhm_mm: 2.0
+  resolution_mm: 1.0

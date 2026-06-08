@@ -1,0 +1,24 @@
+run:
+  run_title: qwen2_5_3b_spatial_task_final_7
+  category_name: retinotopy
+  output_root: results
+  do_pretrained: false
+  overwrite: true
+
+model:
+  run_dir: src/ckpts/qwen2_5_3b_spatial_task_final_7
+  device: cuda
+  neighborhood_dir: src/neighborhoods/model=qwen2-5omni-3b-unified-20-v3_radius=20_neighborhoods=20_coords=42
+
+data:
+  mode: image
+  stimuli_root: /mnt/u14157_ic_nlp_001_files_nfs/nlpdata1/home/bkhmsi/topoomni/stimuli/retinotopy/output
+  batch_size: 1
+  lm_reduce: mean
+  vis_reduce: mean
+
+stats:
+  alpha: 0.05
+  smooth: true
+  fwhm_mm: 2.0
+  resolution_mm: 1.0

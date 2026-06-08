@@ -1,0 +1,20 @@
+run-title: qwen2_5_3b_spatial_task_final_7
+debug: false
+
+train:
+  n-epochs: 5
+  batch-size: 4
+  grad-accum: 4
+  learning-rate: 5.e-5
+  lr-scheduler: cosine
+  warmup-ratio: 0.03
+  weight-decay: 0.01
+  apply-spatial-loss: true
+
+topo-params:
+  alpha: 20
+  accum: mean
+  activation-decay: 0
+  position-dir: neighborhoods/model=qwen2-5omni-3b-unified-20-v3_radius=20_neighborhoods=20_coords=42
+  cortical-init: 0.001
+  identity-init: true

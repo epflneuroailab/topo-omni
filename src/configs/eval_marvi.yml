@@ -1,0 +1,23 @@
+data:
+  batch_size: 1
+  lm_reduce: mean
+  mode: video
+  odd_or_even: all
+  stimuli_root: /mnt/u14157_ic_nlp_001_files_nfs/nlpdata1/home/bkhmsi/topoomni/stimuli/marvi_videos_faces
+  vis_reduce: mean
+model:
+  device: cuda
+  run_dir: ckpts/qwen2_5_3b_spatial_task_final_7
+  run_title: qwen2_5_3b_spatial_task_final_7
+run:
+  category_name: faces
+  do_pretrained: false
+  output_root: outputs
+  overwrite: false
+  run_title: qwen2_5_3b_spatial_task_final_7
+stats:
+  alpha: 0.001
+  fwhm_mm: 4.0
+  resolution_mm: 1.0
+  smooth: true
+  topk_pct: 0
