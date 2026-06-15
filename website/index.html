@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Topo-Omni — Discovering Functionally Selective Brain Regions with a Deep Topographic Multimodal Model</title>
+<meta name="description" content="Topo-Omni is a topographic multimodal model in which visual, auditory, and language/cognitive processing share a single contiguous in-silico cortical sheet, recovering brain-like functional organization and predicting novel cortical networks.">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Topo-Omni — Discovering Functionally Selective Brain Regions with a Deep Topographic Multimodal Model">
+<meta property="og:description" content="A topographic multimodal model whose visual, auditory, and language/cognitive units share one contiguous in-silico cortical sheet — recovering brain-like clusters, causal intervention effects, and novel cortical networks.">
+<meta property="og:image" content="assets/images/graphical-abstract.webp">
+
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/js/all.min.js"></script>
+<link rel="icon" type="image/png" href="assets/images/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<nav class="navbar" id="navbar">
+  <div class="navbar__inner">
+    <a class="navbar__brand" href="#top">
+      <img src="assets/images/logo.png" alt="" class="navbar__logo">
+      <span>Topo-Omni</span>
+    </a>
+    <button class="navbar__toggle" id="navToggle" aria-label="Toggle navigation" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="navbar__links" id="navLinks">
+      <a href="#abstract">Abstract</a>
+      <a href="#findings">Findings</a>
+      <a href="#citation">Citation</a>
+      <a href="https://arxiv.org/abs/2606.09770" class="navbar__pill" target="_blank" rel="noopener">Paper</a>
+      <a href="https://github.com/epflneuroailab/topo-omni" class="navbar__icon" target="_blank" rel="noopener">
+        <span class="icon">
+          <i class="fab fa-github" aria-hidden="true"></i>
+        </span>
+        <span>Code</span>
+      </a>
+      <a href="https://huggingface.co/epfl-neuroai/topo-omni" target="_blank" class="navbar__icon">
+        <span class="icon">
+          <img src="assets/images/hf-logo.png" alt="">
+        </span>
+        <span>Model</span>
+      </a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="hero__bg" aria-hidden="true"></div>
+  <div class="hero__content">
+    <p class="hero__tag">NeuroAI Lab &middot; EPFL</p>
+    <h1 class="hero__title">Discovering Functionally Selective Brain Regions with a Deep Topographic Multimodal Model</h1>
+
+    <p class="hero__authors">
+      <span>Badr AlKhamissi<sup>*</sup></span>,
+      <span>Johannes Mehrer<sup>*</sup></span>,
+      <span>Lara Marinov</span>,
+      <span>Ahmed Abdelaal</span>,
+      <span>Abdulkadir Gokce</span>,
+      <span>Martin Schrimpf</span>
+    </p>
+    <p class="hero__affil">NeuroAI Lab, EPFL &nbsp;&middot;&nbsp; <sup>*</sup>Equal contribution</p>
+
+    <div class="hero__actions">
+      <a class="btn btn--solid" href="https://arxiv.org/abs/2606.09770" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+        Read the Paper
+      </a>
+      <a class="btn" href="https://github.com/epflneuroailab/topo-omni" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.57.1.78-.25.78-.55 0-.27-.01-1.17-.02-2.12-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.79 0c2.21-1.49 3.18-1.18 3.18-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.43-2.7 5.41-5.27 5.69.42.36.78 1.06.78 2.15 0 1.55-.01 2.8-.01 3.18 0 .31.21.66.79.55A11.5 11.5 0 0 0 23.5 12c0-6.35-5.15-11.5-11.5-11.5Z"/></svg>
+        Code
+      </a>
+      <a href="https://huggingface.co/epfl-neuroai/topo-omni" target="_blank"
+        class="btn">
+        <span class="icon">
+          <img src="assets/images/hf-logo.png" style="width: 20px; height: 20px;">
+        </span>
+        <span>Model</span>
+      </a>
+      <a class="btn" href="mailto:badr.alkhamissi@epfl.ch">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+        Contact
+      </a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="section" id="abstract">
+    <div class="container container--narrow">
+      <h2 class="section__heading">Abstract</h2>
+      <p class="abstract__text">
+        Nearby neurons in cortex share similar response profiles, producing systematic spatial organization across
+        sensory and cognitive systems. Recent topographic models reproduce aspects of this structure but remain
+        unimodal and spatially constrain each layer separately, yielding fragmented maps that capture neither the
+        contiguity of cortical processing streams nor their integration across modalities.
+        We introduce <strong>Topo-Omni</strong>, a topographic multimodal model in which visual, auditory, and
+        language/cognitive processing share a single contiguous in-silico sheet. Built by fine-tuning a pretrained
+        foundation model with a spatial smoothness objective, this architecture develops clusters across modalities
+        that are consistent with human neuroimaging, from sensory to cognitive systems.
+        Driving or suppressing a cluster selectively biases or impairs perception, paralleling human intervention
+        studies. Finally, we use our model to screen for novel clusters in-silico and discover new
+        <em>natural landscape</em> and <em>animal</em> networks which we validate in human data.
+        A single spatial principle thus organizes representations across modalities and processing stages, yielding
+        testable hypotheses about cortical organization.
+      </p>
+    </div>
+  </section>
+
+  <!-- <section class="section section--alt">
+    <div class="container">
+      <div class="stats">
+        <div class="stat">
+          <span class="stat__value">1</span>
+          <span class="stat__label">Contiguous in-silico cortical sheet spanning vision, audition &amp; cognition</span>
+        </div>
+        <div class="stat">
+          <span class="stat__value">r = 0.88</span>
+          <span class="stat__label">Correlation between Topo-Omni's face-region profile and human FFA</span>
+        </div>
+        <div class="stat">
+          <span class="stat__value">11/12</span>
+          <span class="stat__label">NSD ROIs where brain alignment matches non-topographic baselines</span>
+        </div>
+        <div class="stat">
+          <span class="stat__value">2</span>
+          <span class="stat__label">Novel cortical networks discovered &amp; validated in human fMRI</span>
+        </div>
+      </div>
+    </div>
+  </section> -->
+
+  <section class="section" id="findings">
+    <div class="container">
+      <h2 class="section__heading">Main Findings</h2>
+      <p class="section__intro">
+        Topo-Omni builds on <strong>Qwen2.5-Omni</strong> and learns a bidirectional projection of its units onto a
+        single two-dimensional cortical sheet, optimized jointly with a task loss and a spatial-smoothness loss.
+        Across every modality the model was tested on, this single objective recovers spatial organization that
+        parallels the human brain &mdash; from category-selective patches to causal involvement in perception.
+      </p>
+
+      <!-- Finding 1: Overview -->
+      <article class="finding">
+        <div class="finding__media finding__media">
+          <img src="assets/images/graphical-abstract.webp" alt="Overview of Topo-Omni: a multimodal architecture is projected onto a single contiguous in-silico cortical sheet, yielding category-selective clusters for vision, audio, and language/cognition that match human fMRI response profiles, plus a model-guided discovery pipeline validated on human data." loading="lazy">
+        </div>
+        <div class="finding__text">
+          <span class="finding__index">01</span>
+          <h3>A single sheet for vision, audition &amp; cognition</h3>
+          <p>
+            Topo-Omni projects the vision encoder, audio encoder, and language/cognitive module of Qwen2.5-Omni onto
+            one shared in-silico cortical sheet. A spatial-smoothness loss, applied jointly with the model's
+            self-distillation task loss during fine-tuning, encourages nearby units to develop similar response
+            profiles &mdash; with no neural data or category labels supplied during training. The result is
+            brain-like clustering that spans sensory and cognitive systems within a single contiguous map, from
+            category-selective patches (b) to model-guided discovery of new networks validated in human fMRI (c).
+          </p>
+        </div>
+      </article>
+
+      <!-- Finding 2: Vision -->
+      <article class="finding">
+        <div class="finding__media">
+          <img src="assets/images/vision.webp" alt="Topo-Omni develops category-selective regions for faces, scenes, objects, and word forms in its vision encoder, alongside retinotopic maps of polar angle and eccentricity, each compared against human fMRI selectivity maps and response profiles from Marvi et al. 2025." loading="lazy">
+        </div>
+        <div class="finding__text">
+          <span class="finding__index">02</span>
+          <h3>Visual category selectivity &amp; retinotopy emerge unsupervised</h3>
+          <p>
+            Applying the EMFL functional localizers from <a href="#citation">Marvi et al. (2025)</a> to the vision
+            encoder recovers focal clusters selective for <strong>faces</strong>, <strong>scenes</strong>,
+            <strong>objects</strong>, and <strong>visual word forms</strong> &mdash; paralleling the FFA, PPA, LOC,
+            and VWFA of the human ventral stream. Response profiles correlate with human fMRI across ten stimulus
+            categories (Pearson <em>r</em> = 0.61&ndash;0.89, mean <em>r</em> = 0.75), reaching significance for the
+            face- and object-selective regions. Without any explicit supervision, the same encoder also develops
+            smooth, continuous maps of polar angle and eccentricity, echoing the retinotopic organization of early
+            visual cortex.
+          </p>
+        </div>
+      </article>
+
+      <!-- Finding 3: Audio -->
+      <article class="finding">
+        <div class="finding__media">
+          <img src="assets/images/audio.webp" alt="Topo-Omni's audio encoder develops speech-selective and voice-selective regions matching human superior temporal gyrus and temporal voice areas, plus a tonotopic map of preferred frequency, compared against human fMRI from Marvi et al. 2025, Pernet et al. 2015, and Hedger et al. 2026." loading="lazy">
+        </div>
+        <div class="finding__text">
+          <span class="finding__index">03</span>
+          <h3>Speech, voice &amp; tonotopic maps in the audio encoder</h3>
+          <p>
+            A <strong>speech-selective</strong> region emerges whose response profile mirrors the human superior
+            temporal gyrus (<em>r</em> = 0.69): it responds broadly to intelligible speech but drops for quilted
+            speech, which destroys linguistic structure while preserving acoustic energy. A separate
+            <strong>voice-selective</strong> region responds preferentially to human vocalizations over non-vocal
+            sounds, paralleling the temporal voice areas along the superior temporal sulcus. The audio encoder also
+            develops a <strong>tonotopic map</strong>, where neighboring units share similar preferred frequencies
+            &mdash; mirroring the tonotopic organization of human auditory cortex.
+          </p>
+        </div>
+      </article>
+
+      <!-- Finding 4: Cognition -->
+      <article class="finding">
+        <div class="finding__media">
+          <img src="assets/images/cognition.webp" alt="Topo-Omni's language/cognitive module develops spatially distinct language, multiple-demand, and theory-of-mind networks that parallel human fMRI activations from classical localizer contrasts (Marvi et al. 2025)." loading="lazy">
+        </div>
+        <div class="finding__text">
+          <span class="finding__index">04</span>
+          <h3>Language, multiple-demand &amp; theory-of-mind networks</h3>
+          <p>
+            Passing linguistic stimuli directly as text tokens to the language/cognitive module reveals three
+            spatially distinct networks, each isolated by a classical localizer contrast: a
+            <strong>language network</strong> responding to meaningful sentences over non-words
+            (<em>d&prime;</em> = 1.39), a <strong>multiple-demand network</strong> responding to arithmetic problems
+            over narrative reasoning (<em>d&prime;</em> = 0.54), and a <strong>theory-of-mind network</strong>
+            responding to false-belief over false-photograph questions (<em>d&prime;</em> = 0.15). These parallel the
+            fronto-temporal language network, the frontoparietal multiple-demand network, and the
+            temporo-parietal / medial-prefrontal theory-of-mind network in human cortex &mdash; all emerging from the
+            same spatial-smoothness objective, with no brain data or labels supplied during training.
+          </p>
+        </div>
+      </article>
+
+      <!-- Finding 5: Brain alignment & task performance (table, no image) -->
+      <article class="finding">
+        <div class="finding__text">
+          <span class="finding__index">05</span>
+          <h3>Topography preserves brain alignment &amp; task performance</h3>
+          <p>
+            Imposing spatial structure could in principle come at a cost. We compared Topo-Omni against a
+            non-topographic <strong>SFT-Omni</strong> baseline (same backbone, task loss only) and the original
+            <strong>Qwen2.5-Omni-3B</strong> on the Natural Scenes Dataset (NSD) and on OmniBench. Across twelve
+            ventral-stream ROIs, Topo-Omni's brain predictivity is statistically indistinguishable from both
+            baselines in 11 of 12 regions, and it achieves the best overall OmniBench accuracy and the best Sound
+            Event subtask score. The spatial constraint that produces brain-like topography therefore comes at no
+            measurable cost to neural predictivity or downstream multimodal capability.
+          </p>
+        </div>
+        <div class="table-wrap">
+          <table class="comparison-table">
+            <thead>
+              <tr>
+                <th scope="col">Benchmark</th>
+                <th scope="col">ROI / Subtask</th>
+                <th scope="col">Topo-Omni</th>
+                <th scope="col">SFT-Omni</th>
+                <th scope="col">Qwen2.5-3B</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td rowspan="4">NSD Brain-Score<br><span class="muted">(Pearson&nbsp;<em>r</em>, noise-corrected)</span></td><td>FFA-1 (faces)</td><td>0.742</td><td>0.740</td><td>0.738</td></tr>
+              <tr><td>PPA (scenes)</td><td>0.821</td><td>0.820</td><td>0.821</td></tr>
+              <tr><td>VWFA-1 (words)</td><td>0.689</td><td>0.689</td><td>0.689</td></tr>
+              <tr><td>EBA (bodies)</td><td>0.740</td><td>0.739</td><td>0.739</td></tr>
+              <tr><td rowspan="2">OmniBench<br><span class="muted">(accuracy, %)</span></td><td>Overall</td><td><strong>43.78</strong></td><td>43.70</td><td>43.35</td></tr>
+              <tr><td>Sound Event</td><td><strong>40.75</strong></td><td>39.25</td><td>40.38</td></tr>
+            </tbody>
+          </table>
+          <p class="table-caption">Selected rows from Table&nbsp;1 &mdash; see the paper for the full twelve-ROI comparison and significance tests.</p>
+        </div>
+      </article>
+
+      <!-- Finding 6: Causal -->
+      <article class="finding">
+        <div class="finding__media">
+          <img src="assets/images/causal.webp" alt="Driving face-selective units in Topo-Omni increases perceived face frequency toward ceiling; suppressing the top 10 percent of face-selective units collapses face-identification accuracy while leaving body, scene, and object recognition intact; suppressing other category regions leaves face accuracy largely unaffected." loading="lazy">
+        </div>
+        <div class="finding__text">
+          <span class="finding__index">06</span>
+          <h3>Face-selective units are necessary &amp; sufficient for face perception</h3>
+          <p>
+            Because Topo-Omni's clusters are spatially compact, they can be directly driven or suppressed &mdash;
+            like TMS or intracranial stimulation in neuroscience. <strong>Driving</strong> units in the
+            face-selective region biases the model toward reporting "face" for almost any input, reaching
+            near-ceiling perception at just 15% coverage of the region <strong>(a)</strong>. Conversely,
+            <strong>suppressing</strong> the top 10% of face-selective units collapses face-identification accuracy
+            to near zero while recognition of bodies, scenes, and objects remains largely intact
+            <strong>(b)</strong> &mdash; and suppressing those other regions instead leaves face recognition
+            essentially unaffected <strong>(c)</strong>. Category-selective clusters in Topo-Omni are therefore not
+            epiphenomenal: they are causally implicated in category-level perception.
+          </p>
+        </div>
+      </article>
+
+      <!-- Finding 7: Discovery -->
+      <article class="finding">
+        <div class="finding__media">
+          <img src="assets/images/discovery.webp" alt="Model-guided clustering of video segments identifies an animals-selective network and a natural-landscapes-selective network in Topo-Omni's cortical sheet; both predictions are validated by right-lateralized prefrontal activation in human fMRI from the Spacetop dataset." loading="lazy">
+        </div>
+        <div class="finding__text">
+          <span class="finding__index">07</span>
+          <h3>Model-guided discovery of novel cortical networks</h3>
+          <p>
+            Beyond recovering known regions, Topo-Omni can propose new hypotheses about cortical organization.
+            Clustering naturalistic video segments by their selectivity profiles on the in-silico sheet revealed two
+            networks with no clear precedent in the literature: one selective for <strong>animals</strong> (snakes,
+            birds, primates) <strong>(a)</strong> and one for <strong>natural landscapes</strong> (beaches, rocky
+            terrain, alpine peaks) <strong>(b)</strong>. Testing these model-derived video contrasts on independent
+            human fMRI data (Spacetop) reveals right-lateralized clustering in prefrontal cortex for both categories
+            &mdash; turning an in-silico observation into a validated, testable prediction about human cortex.
+          </p>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <section class="section section--alt" id="citation">
+    <div class="container container--narrow">
+      <h2 class="section__heading">Citation</h2>
+      <p class="section__intro">If you find this work useful, please cite the paper:</p>
+      <div class="bibtex">
+        <button class="bibtex__copy" id="copyBibtex" type="button">Copy</button>
+        <pre><code id="bibtexText">@article{alkhamissi2026topoomni,
+  title={Discovering Functionally Selective Brain Regions with a Deep Topographic Multimodal Model},
+  author={AlKhamissi, Badr and Mehrer, Johannes and Marinov, Lara and Abdelaal, Ahmed and Gokce, Abdulkadir and Schrimpf, Martin},
+  journal={arXiv preprint arXiv:2606.09770},
+  year={2026}
+}</code></pre>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="container footer__inner">
+    <div class="footer__brand">
+      <img src="assets/images/logo.png" alt="NeuroAI Lab logo" class="footer__logo">
+      <div>
+        <p class="footer__title">NeuroAI Lab</p>
+        <p class="footer__subtitle">EPFL</p>
+      </div>
+    </div>
+    <div class="footer__links">
+      <a href="https://github.com/epflneuroailab/topo-omni" target="_blank" rel="noopener">Code</a>
+      <a href="https://huggingface.co/epfl-neuroai/topo-omni" target="_blank" rel="noopener">Weights</a>
+      <a href="mailto:badr.alkhamissi@epfl.ch">Contact</a>
+    </div>
+    <p class="footer__ack">
+      We thank the EPFL NeuroAI and NLP labs for useful discussions. M.S., B.A., and J.M. were supported by the
+      Schmidt Science Foundation's AI2050 program. A.K. and J.M. were supported by the Swiss National Science
+      Foundation. L.M. and A.A. were hosted by the Summer@EPFL program.
+    </p>
+    <p class="footer__copy">&copy; 2026 NeuroAI Lab, EPFL. Project page adapted from common academic templates.</p>
+  </div>
+</footer>
+
+<script src="js/main.js"></script>
+</body>
+</html>
