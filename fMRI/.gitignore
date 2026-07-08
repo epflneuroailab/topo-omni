@@ -1,0 +1,73 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ipynb_checkpoints/
+.venv/
+env/
+
+# --- Large data: NEVER commit (see docs/DESIGN.md §5/§6) ---
+# Raw fMRI, fMRIPrep derivatives, and the precomputed tier live on OSF / external
+# hosts and are pulled by download scripts — not tracked here.
+*.nii
+*.nii.gz
+*.gii
+*.mgz
+*.m3z
+*.h5
+derivatives/
+raw/
+results/
+precomputed/
+
+# Golden-master fixtures ARE committed (small numeric summaries only) — do not
+# ignore them. Keep binaries out via the size policy in docs/DESIGN.md §6, not via *.npz
+# blanket ignores; a fixture .npz that is a small vertex-subset is allowed.
+!**/tests/fixtures/**
+
+# Vendored anatomical parcels ARE committed (Marvi Branch-A fROIs; ~6.8 MB, 65 small
+# NIfTIs) — the standalone source of truth (data/PROVENANCE.md). Re-include despite *.nii.gz.
+!**/data/PARCELS/**
+
+# --- Reference-figure surface maps: heavy interactive HTML (~10 MB each, base64
+#     mesh) → hosted on OSF, NOT git (see <dataset>/docs/reference_figures/README.md).
+#     The small Fig. A2 SVG/PNG + the folder README stay tracked. ---
+**/docs/reference_figures/surface_maps/**/*.html
+
+# --- Calibration run outputs (measured tolerances; not committed — the frozen
+#     values get hand-copied into the tests + README once calibrated) ---
+_calibration_runs/
+
+# --- Downloaded precomputed cut + reproduction outputs (regenerable; hosted on OSF, umbrella
+#     ehrt6). Fetched by download_precomputed.py into <Dataset>/; figures by make_all_figures.
+#     MUST NOT be committed — the code regenerates them. (Extensionless FreeSurfer surfaces and
+#     figure dirs aren't caught by the *.gii/*.nii.gz rules above.) ---
+**/plots/
+**/sourcedata/
+**/native_surface_projections/
+# downloaded cut's surface-projection array (1.3 MB .npz — cut data, not a small test fixture)
+**/02_surface_projection/surface_data_fsaverage6.npz
+*.inflated
+*.pial
+*.white
+*.sphere
+*.curv
+*.sulc
+*.thickness
+# staging / build / verify scratch used by the OSF up/download tooling
+_zip_cache/
+_osf_build/
+_osf_figures_build/
+_osf_repro/
+# default output dirs of reproduce_precomputed_figures.sh (downloaded cut + fetched
+# reference renders; both regenerable + multi-GB — MUST NOT be committed)
+_precomputed_cut/
+_reference_figures/
+
+# --- OS / editor ---
+.DS_Store
+*.swp

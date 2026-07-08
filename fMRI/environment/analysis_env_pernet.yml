@@ -1,0 +1,105 @@
+# Stage-1 (analysis) environment — Pernet 2015.
+#
+# This is the FULL frozen environment the Pernet golden masters were produced under —
+# a verbatim `conda env export` from the dev repo (20241003_pernet_2015/src/environment.yml
+# @ commit f842b1a), not a hand-written scaffold. Every transitive dependency is pinned so
+# a reviewer can recreate the exact stack:
+#
+#     conda env create -f environment/analysis_env_pernet.yml
+#     conda activate pernet_2015_env
+#     pip install -e core            # shared utilities (docs/DESIGN.md §3)
+#
+# Key pins: python 3.9.19, numpy 2.0.2, scipy 1.13.1, nibabel 5.2.1, pandas 2.2.2,
+# nilearn 0.10.4, scikit-learn 1.5.1, statsmodels 0.14.2, matplotlib 3.9.1, seaborn
+# 0.13.2, esda 2.5.1, libpysal 4.8.1.
+#
+# NOTE: Pernet is on nilearn 0.10.4 — a BREAKING gap vs Marvi/Jung's 0.12.1 (surface/GLM
+# API). This is why the three datasets keep separate envs; do not merge them. `core/` is
+# constrained to the version-robust subset so it imports cleanly here AND under 0.12.1
+# (docs/DESIGN.md §4). The numpy 2.0.2 + nilearn 0.10.4 pairing is the real, tested combo the
+# golden masters were frozen under (verified bit-identical to 0.12.1; docs/DESIGN.md §6).
+name: pernet_2015_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - _libgcc_mutex=0.1=main
+  - _openmp_mutex=5.1=1_gnu
+  - bzip2=1.0.8=h7f98852_4
+  - c-ares=1.19.1=h5eee18b_0
+  - ca-certificates=2024.7.4=hbcca054_0
+  - curl=8.7.1=hdbd6064_0
+  - hdf4=4.2.15=h10796ff_3
+  - hdf5=1.10.6=nompi_h3c11f04_101
+  - jpeg=9e=h166bdaf_1
+  - krb5=1.20.1=h143b758_1
+  - ld_impl_linux-64=2.38=h1181459_1
+  - libblas=3.9.0=8_openblas
+  - libcblas=3.9.0=8_openblas
+  - libcurl=8.7.1=h251f7ec_0
+  - libedit=3.1.20230828=h5eee18b_0
+  - libev=4.33=h516909a_1
+  - libffi=3.4.4=h6a678d5_1
+  - libgcc-ng=11.2.0=h1234567_1
+  - libgfortran-ng=7.5.0=h14aa051_20
+  - libgfortran4=7.5.0=h14aa051_20
+  - libgomp=11.2.0=h1234567_1
+  - liblapack=3.9.0=8_openblas
+  - libnetcdf=4.8.1=nompi_hcd642e3_100
+  - libnghttp2=1.57.0=h2d74bed_0
+  - libopenblas=0.3.12=pthreads_hb3c22a3_1
+  - libssh2=1.11.0=h251f7ec_0
+  - libstdcxx-ng=11.2.0=h1234567_1
+  - libzip=1.8.0=h6ac8c49_1
+  - lz4-c=1.9.4=h6a678d5_1
+  - ncurses=6.4=h6a678d5_0
+  - openssl=3.0.14=h5eee18b_0
+  - pip=24.0=py39h06a4308_0
+  - python=3.9.19=h955ad1f_1
+  - python_abi=3.9=2_cp39
+  - readline=8.2=h5eee18b_0
+  - sqlite=3.45.3=h5eee18b_0
+  - tk=8.6.14=h39e8969_0
+  - xz=5.4.6=h5eee18b_1
+  - zlib=1.2.13=h5eee18b_1
+  - zstd=1.5.5=hc292b87_2
+  - pip:
+      # --- analysis-critical (the numbers depend on these) ---
+      - numpy==2.0.2
+      - scipy==1.13.1
+      - nibabel==5.2.1
+      - nilearn==0.10.4
+      - pandas==2.2.2
+      - scikit-learn==1.5.1
+      - statsmodels==0.14.2
+      - patsy==0.5.6
+      - formulaic==0.5.2
+      - joblib==1.4.2
+      - threadpoolctl==3.5.0
+      - matplotlib==3.9.1
+      - seaborn==0.13.2
+      - esda==2.5.1              # island Moran's I
+      - libpysal==4.8.1          # spatial weights for esda
+      - geopandas==1.0.1
+      - shapely==2.0.6
+      - pyproj==3.6.1
+      - pyogrio==0.10.0
+      - networkx==3.2.1
+      - h5py==3.11.0
+      - numexpr==2.10.1
+      - pillow==10.4.0
+      - contourpy==1.2.1
+      - cycler==0.12.1
+      - fonttools==4.53.1
+      - kiwisolver==1.4.5
+      - pyparsing==3.1.2
+      - python-dateutil==2.9.0.post0
+      - pytz==2024.1
+      - tzdata==2024.1
+      - six==1.16.0
+      - packaging==24.1
+      - pyyaml==6.0.2
+      - tqdm==4.66.5
+      # The dev env additionally carried jupyter/awscli/pybids/pycortex tooling that the
+      # figure lineages do not import; trimmed here. The full untrimmed export lives at
+      # 20241003_pernet_2015/src/environment.yml @ f842b1a if an exact clone is needed.

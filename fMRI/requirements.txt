@@ -1,0 +1,44 @@
+# fMRI Stage-1 analysis — convenience single-environment (pip)
+# ============================================================
+# This is a QUICK-START env sufficient to run the precomputed reproduction for all three
+# datasets (download_precomputed.py -> make_all_figures.py) and the OSF up/download tools.
+# It sits on the Marvi/Jung nilearn 0.12.1 boundary — verified to reproduce Jung, Marvi, and
+# Pernet's figures.
+#
+# For BYTE-FAITHFUL reproduction of the golden masters, use the per-dataset conda envs instead
+# (their pins are what the goldens were calibrated under — do NOT unify them; see
+# environment/README.md):
+#     environment/analysis_env_pernet.yml   # nilearn 0.10.4, numpy 2.0.2, python 3.9  (BREAKING vs 0.12.1)
+#     environment/analysis_env_marvi.yml    # nilearn 0.12.1, numpy 1.26.4, python 3.10
+#     environment/analysis_env_jung.yml     # nilearn 0.12.1, numpy 2.2.5,  python 3.10
+# Then:  pip install -e core
+#
+# Note: Pernet is pinned to nilearn 0.10.4 (a breaking surface/GLM API gap). Under this single
+# 0.12.1 env Pernet's figures regenerate, but its golden-master tolerances assume 0.10.4 — use
+# analysis_env_pernet.yml for the calibrated Pernet run.
+
+# --- core scientific / neuroimaging stack ---
+numpy>=1.26
+scipy>=1.11
+pandas>=2.2
+nibabel>=5.3
+nilearn==0.12.1
+scikit-learn>=1.3
+statsmodels>=0.14
+
+# --- plotting (figure rendering) ---
+matplotlib>=3.7
+seaborn>=0.12
+
+# --- Pernet island Moran's I (spatial geometry) ---
+geopandas>=1.0
+
+# --- utilities ---
+tqdm>=4.66
+joblib>=1.4
+
+# --- OSF hosting: download/upload the precomputed cut + figures ---
+osfclient>=0.0.5
+
+# --- tests ---
+pytest>=7.0

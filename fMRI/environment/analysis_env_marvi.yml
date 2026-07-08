@@ -1,0 +1,31 @@
+# Stage-1 (analysis) environment — Marvi 2025 (EMFL).
+#
+# Pinned to the stack the Marvi golden masters were produced under (docs/DESIGN.md §6).
+# nilearn 0.12.1 (shared boundary with Jung), but numpy differs from Jung
+# (1.26.4 here vs 2.2.5) — hence still a separate env.
+#
+# Source of truth: 20251030_Marvi_2025_efficient_fMRI_localizer/src/requirements.txt
+# (commit ef1da34).
+# STATUS: scaffold — versions captured from the dev repo; verify a clean solve
+# and freeze the full transitive lock during the Marvi port (docs/DESIGN.md §9 step 3).
+name: omni-fmri-marvi
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - numpy=1.26.4
+  - scipy=1.11.1
+  - nibabel=5.3.2
+  - pandas=2.3.3
+  - matplotlib=3.7.1
+  - scikit-learn
+  - pytest
+  - pip
+  - pip:
+      - nilearn==0.12.1
+      - seaborn==0.12.2
+      # - -e ../core           # shared utilities (docs/DESIGN.md §3); enable once core is packaged
+      # NOTE: the golden masters + the Branch A/B test suite (tests/) run under this stack;
+      #       pytest is required to run them. numpy/scipy/nibabel/pandas pinned to the versions
+      #       the goldens were calibrated under (Marvi_2025/README.md §9); scikit-learn is nilearn's dep.
+      # TODO(port): freeze the full transitive lock once a clean solve is verified.

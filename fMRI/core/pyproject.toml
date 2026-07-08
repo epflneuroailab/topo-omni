@@ -1,0 +1,28 @@
+# Minimal packaging for the shared-utilities package (docs/DESIGN.md §3 NOTE, §10 decided).
+# Installed editable into EACH dataset env: `pip install -e core/`. Import as `core`.
+#
+# Constraint (docs/DESIGN.md §4): `core` is imported under BOTH nilearn 0.10.4 (Pernet) and
+# 0.12.1 (Marvi/Jung). Keep runtime deps to the version-robust subset (numpy/scipy);
+# nilearn is intentionally NOT pinned here — surface code that touches nilearn is
+# handled specially (thin version-tolerant wrapper or kept local), see surface.py.
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omni-fmri-core"
+version = "0.0.0"
+description = "Shared utilities for the Omni-paper unified fMRI code release (island Moran's I, surface plotting, path resolution, fROI CV)."
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "scipy",
+    # nilearn is deliberately unpinned / not required at the package level — see surface.py.
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.setuptools]
+packages = ["core"]
+package-dir = {"core" = "."}
