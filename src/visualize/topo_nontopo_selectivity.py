@@ -1,3 +1,4 @@
+import os
 import json
 import numpy as np
 import pickle as pkl
@@ -138,9 +139,9 @@ if __name__ == "__main__":
         # ("theory_of_mind_text_ALL", "cognitive", "False Belief"),
     ]
 
-    dirpath = "results"
+    dirpath = os.getenv("SAVE_DIR", "results")
 
-    models = ("qwen2_5_3b_spatial_task_final_7", "qwen2_5_3b_task_7")
+    models = ("topo-omni", "qwen2_5_3b_task_7")
 
     anatomical_constraint = False
     filter_out_non_significant = False

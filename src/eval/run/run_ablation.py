@@ -10,10 +10,8 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from glob import glob
 from tqdm import tqdm
-from transformers import Qwen2_5OmniProcessor, Qwen2_5OmniThinkerConfig
 from qwen_omni_utils import process_mm_info
-
-from models.qwen2_5_omni import Qwen2_5OmniThinkerForConditionalGeneration
+from src.core.model_loading import load_topo_omni, MODEL_TITLE
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -382,8 +380,7 @@ if __name__ == "__main__":
 
     print(f"ABALTE: {ABLATE} | LOCALIZER: {LOCALIZER} | STIMULI: {STIMULI} | MODE: {MODE} | PERCENTAGE: {PERCENTAGE}")
 
-    model_name = "qwen2_5_3b_spatial_task_final_7"
-    MODEL_ID = f"{CKPT_DIR}/{model_name}"
+    model_name = MODEL_TITLE
     SAVE_DIR = f"{SAVE_DIR}/{model_name}"
 
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -475,23 +472,7 @@ if __name__ == "__main__":
         print(f"Save path {save_path} already exists.")
         exit(0)
 
-    model_config = Qwen2_5OmniThinkerConfig.from_pretrained(MODEL_ID)
-
-    model_config.audio_config.is_training = False
-    model_config.vision_config.is_training = False
-    model_config.text_config.is_training = False
-
-    model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
-        MODEL_ID, 
-        torch_dtype=torch.bfloat16,
-        device_map="auto",
-        config=model_config,
-    )
-    
-    model.eval()
-    model.bfloat16()  
-
-    processor = Qwen2_5OmniProcessor.from_pretrained(MODEL_ID)
+    model, processor, _ = load_topo_omni(device=DEVICE)
     
     # options = ["Yes", "No"]
     # options = ["An indoor or outdoor location", "A face", "A toy or object", "A body part"]

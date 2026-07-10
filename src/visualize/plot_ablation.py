@@ -12,7 +12,7 @@ def read_json(file_path):
 
 if __name__ == "__main__":
 
-    dirpath = "results/qwen2_5_3b_spatial_task_final_7/ablation"
+    dirpath = f"{os.getenv('SAVE_DIR', 'results')}/topo-omni/ablation"
     file_template = "ablation_stimuli={stimuli}_localizer={localizer}_perc={percentage}_stimulate=False.json"
     # file_template = "ablation_stimuli={stimuli}_localizer={localizer}_cluster1_stimulate=False_strength=0.0.json"
 

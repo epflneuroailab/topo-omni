@@ -24,6 +24,7 @@ from scipy.ndimage import binary_opening
 from scipy.sparse.csgraph import connected_components
 from src.utils.smoothing import NeuronSmoothingConv
 from src.utils.spatial_stats import compute_standard_morans_i, compute_island_morans_i, compute_fdr_threshold
+from src.core.model_loading import unified_grid_coords, MODEL_TITLE
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -186,7 +187,7 @@ def run_contrast(target_cluster_id: int, topk_pct: float = 1):
 
     moorans_I_results = {}
 
-    model_name = "qwen2_5_3b_spatial_task_final_7"
+    model_name = MODEL_TITLE
 
     save_dir = f"{SAVE_DIR}/{model_name}/spacetop_clusters_figures/{str(target_cluster_id).zfill(2)}"
     os.makedirs(save_dir, exist_ok=True)
@@ -248,15 +249,7 @@ def run_contrast(target_cluster_id: int, topk_pct: float = 1):
     other_data = other_data[chosen_indices]
     print(f"Filtered other data shape: {other_data.shape}")
 
-    N_col = 512
-    N_row = 304
-    run_config = load_config(os.path.join(CKPT_DIR, model_name, "config.yml"))
-    neighborhood_dir = run_config["topo-params"]["position-dir"]
-    coords_path = os.path.join(neighborhood_dir, "coords.npy")
-    if os.path.exists(coords_path):
-        coords_lm = np.load(coords_path)
-    else:
-        coords_lm = np.array([(i,j) for i in range(N_row) for j in range(N_col)])
+    coords_lm = unified_grid_coords()
 
     if USE_SMOOTH:
         fwhm_mm = 4.0 # {2.0, 4.0, 8.0, 12.0, 16.0} inspired by typical fMRI smoothing kernels, but can be tuned based on expected spatial scale of clusters

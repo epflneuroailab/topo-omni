@@ -1,18 +1,20 @@
+# Retinotopy eval config. Paths resolve from the environment (.env) via ${oc.env:VAR}.
+# Only the `raw` recompute path loads this file. The retinotopy stimulus bank can be
+# regenerated with `python -m src.utils.generate_retinotopy` (see README).
 run:
-  run_title: qwen2_5_3b_spatial_task_final_7
+  run_title: topo-omni
   category_name: retinotopy
-  output_root: results
+  output_root: ${oc.env:SAVE_DIR,results}
   do_pretrained: false
   overwrite: true
 
 model:
-  run_dir: src/ckpts/qwen2_5_3b_spatial_task_final_7
   device: cuda
-  neighborhood_dir: src/neighborhoods/model=qwen2-5omni-3b-unified-20-v3_radius=20_neighborhoods=20_coords=42
+  # model: epfl-neuroai/topo-omni   # optional override (HF id or local dir); default: $TOPO_OMNI_MODEL
 
 data:
   mode: image
-  stimuli_root: /mnt/u14157_ic_nlp_001_files_nfs/nlpdata1/home/bkhmsi/topoomni/stimuli/retinotopy/output
+  stimuli_root: ${oc.env:STIMULI_DIR}/retino_bank
   batch_size: 1
   lm_reduce: mean
   vis_reduce: mean

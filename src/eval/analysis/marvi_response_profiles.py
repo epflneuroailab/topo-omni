@@ -7,9 +7,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 from scipy.ndimage import binary_opening
-from transformers import Qwen2_5OmniProcessor, Qwen2_5OmniThinkerConfig
-
-from src.models.qwen2_5_omni import Qwen2_5OmniThinkerForConditionalGeneration
+from src.core.model_loading import load_topo_omni, unified_grid_coords
 from src.eval.run.run_selectivity import extract_features_for_video, extract_features_for_audio, place_on_grid, NeuronSmoothingConv
 from src.visualize.selectivity import remove_small_components
 
@@ -132,7 +130,7 @@ if __name__ == "__main__":
 
     import argparse
     parser = argparse.ArgumentParser(description="Evaluate response profiles for different conditions.")
-    parser.add_argument("--model_name", type=str, default="qwen2_5_3b_spatial_task_final_7", help="Model name to evaluate")
+    parser.add_argument("--model_name", type=str, default="topo-omni", help="Model name to evaluate")
     parser.add_argument("--localizer", type=str, default="faces", help="Localizer condition to evaluate (e.g., faces, bodies, scenes)")
     parser.add_argument("--top_k_pct", type=int, default=1, help="Top k percent of units to keep")
     parser.add_argument("--odd_or_even", type=str, default=None, help="Whether to use odd or even runs for evaluation")
@@ -154,10 +152,7 @@ if __name__ == "__main__":
     smoother = NeuronSmoothingConv(fwhm_mm=fwhm_mm, resolution_mm=resolution_mm)
 
     model_name = args.model_name
-    run_config = load_config(os.path.join(CKPT_DIR, model_name, "config.yml"))
-    neighborhood_dir = run_config["topo-params"]["position-dir"]
-    coords_path = os.path.join(neighborhood_dir, "coords.npy")
-    coords = np.load(coords_path)
+    coords = unified_grid_coords()
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -196,26 +191,7 @@ if __name__ == "__main__":
         fwhm_mm=fwhm_mm,
     )
 
-    run_dir = f"{CKPT_DIR}/{model_name}"
-
-    print(f"> Loading processor & config from: {run_dir}")
-    processor = Qwen2_5OmniProcessor.from_pretrained(run_dir)
-    model_config = Qwen2_5OmniThinkerConfig.from_pretrained(run_dir)
-
-    model_config.audio_config.is_training = False
-    model_config.vision_config.is_training = False
-    model_config.text_config.is_training = False
-    model_config.apply_spatial_loss = True
-
-    model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
-        run_dir,
-        config=model_config,
-        device_map=None,
-        torch_dtype=torch.bfloat16,
-    )
-
-    model.to("cuda:0")
-    model.eval()
+    model, processor, _ = load_topo_omni(device=device)
 
     save_dir = f"{SAVE_DIR}/{model_name}/response_profiles"
     save_path = f"{save_dir}/{localizer}_response_profiles_top{top_k_pct}_{trial_type}_fwhm_mm={fwhm_mm}_anat={anatomical_constraint}.pkl"

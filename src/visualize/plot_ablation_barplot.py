@@ -27,7 +27,7 @@ color_palette = sns.color_palette(["#E64B35", "#F39B2F", "#F1C232", "#EFC94C"])
 
 if __name__ == "__main__":
 
-    dirpath = "results/qwen2_5_3b_spatial_task_final_7/ablation"
+    dirpath = f"{os.getenv('SAVE_DIR', 'results')}/topo-omni/ablation"
     file_template = "similarity_ablation_results_top{percentage}_stimulate=False_v4.json"
 
     no_ablation_file = "similarity_no_ablation_results_v4.json"
@@ -44,7 +44,7 @@ if __name__ == "__main__":
         "a toy or object",
     ]
 
-    model_name = "qwen2_5_3b_spatial_task_final_7"
+    model_name = "topo-omni"
     plot_data = []
 
     file_name = file_template.format(percentage=f"{percentage:.0f}")

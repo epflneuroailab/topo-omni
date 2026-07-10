@@ -66,7 +66,7 @@ if __name__ == "__main__":
 
     dirpath = "task-alignvideo/clustering_v2"
     cortical_sheet_paths = f"{dirpath}/cortical_sheets"
-    manifest_path = f"{dirpath}/merged_clusters_tvals_v3.json"
+    # Per-cluster selectivity is computed over the raw early-stopped clusters.
     manifest_path = f"{dirpath}/clusters_tvals.json"
 
     data = read_json(manifest_path)

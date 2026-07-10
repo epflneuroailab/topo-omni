@@ -1,0 +1,209 @@
+{
+  "name": "topo-omni-cut",
+  "description": "Precomputed model-side figure inputs for AlKhamissi & Mehrer et al., 2026.",
+  "osf_guid": "wb2jm",
+  "osf_zip": "topo_omni_cut.zip",
+  "zip_sha256": "63375871b95b90cee34d3dd6795e9fdb5ccbc8917d8b4d28ba9cf1f6d215bc74",
+  "files": [
+    {
+      "path": "topo-omni-cut/topo-omni/faces/faces_all_selectivity_stats.pkl",
+      "bytes": 4981160,
+      "sha256": "283731241dcc6a127ce1d261ef3f1d31f122ff2580a4c89a25f090fd9a211f0d"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/bodies/bodies_all_selectivity_stats.pkl",
+      "bytes": 4981160,
+      "sha256": "cdb6147c55000dd118018b9673b5470fb3e22267f65febc0ba27d10fc972431c"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/scenes/scenes_all_selectivity_stats.pkl",
+      "bytes": 4981160,
+      "sha256": "95ed426f9044b3a40e6ba8b952545a5ffbe862c33f15cd2aaa2c1e857ab9f7ff"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/objects/objects_all_selectivity_stats.pkl",
+      "bytes": 4981160,
+      "sha256": "5025e9e523d3356670fff619a9c0ca2148bbb9e69be05c93c7c419bc3604a08d"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/vwfa/vwfa_all_selectivity_stats.pkl",
+      "bytes": 4981160,
+      "sha256": "e8e28939c50a6eae7ccab9e54e1c763f2774824646e21d48719d9b5207cf928d"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/speech/speech_all_selectivity_stats.pkl",
+      "bytes": 4981160,
+      "sha256": "8e05777c2afe916d2869af3db45eef1d9b59d4e8fa8350757250aaf53d5951eb"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/vocals/vocals_all_selectivity_stats.pkl",
+      "bytes": 4981160,
+      "sha256": "a5249035c1d2c02de66b9bf6c5d8790df57d65c6307334b3ce63e7abe6353246"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/language_text/language_text_all_selectivity_stats.pkl",
+      "bytes": 4981160,
+      "sha256": "9e50ed7bf21c8c22acd743479b44302315a83a185f8374ecba7bd29f9b04b2f5"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/theory_of_mind_text/theory_of_mind_text_all_selectivity_stats.pkl",
+      "bytes": 4981160,
+      "sha256": "c3eddbe52b0a99bef9e212444dfc3b211dfcd8e6eb33107c8d9b7f601421bb89"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/multiple_demand_text/multiple_demand_text_all_selectivity_stats.pkl",
+      "bytes": 4981160,
+      "sha256": "132e1f560073a97d681da29f21af813cc89fbc68383f3711f7fb68bb09d2af76"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/response_profiles/faces_response_profiles_top1_even.pkl",
+      "bytes": 1193648,
+      "sha256": "00127f7ae4d94ea6fe1b07d507fb950e9d250a45cf8b58354f3180228bb12f9f"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/response_profiles/faces_response_profiles_top1_odd.pkl",
+      "bytes": 894170,
+      "sha256": "63412651b932cc1560300f495a9d691fbea8fb41ba3bcd13b55553d5d9e47f70"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/response_profiles/scenes_response_profiles_top1_even.pkl",
+      "bytes": 1213644,
+      "sha256": "344ab7e4bc1188bc57d088680365b0539c702d437ea1d94146c94d87792bcfa4"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/response_profiles/scenes_response_profiles_top1_odd.pkl",
+      "bytes": 931492,
+      "sha256": "f34aea674c20ec927347278bb9d54a165922163ad4172d513ce9e7c755472ec2"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/response_profiles/objects_response_profiles_top1_even.pkl",
+      "bytes": 1189651,
+      "sha256": "66a1500ad385f5bc8fd6b01a318dd0f84c4b74fb3970f8a22ea840381af4f867"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/response_profiles/objects_response_profiles_top1_odd.pkl",
+      "bytes": 760900,
+      "sha256": "8d622f01e28bece2c25d8dbcf08026513f1dd1e19758415c2e382aa45b2637af"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/response_profiles/vwfa_response_profiles_top1_even.pkl",
+      "bytes": 1029655,
+      "sha256": "c515681aac02eb09a8bda90c445ae80b8275482e0b1888432c34f781c8e0bea8"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/response_profiles/vwfa_response_profiles_top1_odd.pkl",
+      "bytes": 662441,
+      "sha256": "aef8906d8e43b1b58c4c0ee515299527c28cac5a70d48d5447ea2e7c721c14fb"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/response_profiles/speech_response_profiles_top1_even.pkl",
+      "bytes": 655086,
+      "sha256": "a8d2447419a99e47bdd6a410894488dfde85f4d261559e663607a61aec6a81c3"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/response_profiles/speech_response_profiles_top1_odd.pkl",
+      "bytes": 896836,
+      "sha256": "c2643e53f83fbd24e80480410fc41a183108c24d7374175277dcc63ee68ea07c"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/response_profiles/pernet_fold_A_response_profiles_top1_None_fwhm_mm=4.0_anat=True.pkl",
+      "bytes": 530050,
+      "sha256": "af447b892fcdccef42b95025583143e1dcfb30280903de459022c970f331632d"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/response_profiles/pernet_fold_B_response_profiles_top1_None_fwhm_mm=4.0_anat=True.pkl",
+      "bytes": 530050,
+      "sha256": "14912d2d6fa4d33d5d249a89815a6761c55168a2def6566903b066c846870847"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/response_profiles/language_text_response_profiles_top10_even.pkl",
+      "bytes": 62018671,
+      "sha256": "bd90f012a04ae41e47c8a1c6c31913c21bb7fe2e97da0d3a93fa91f78e1066ce"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/response_profiles/language_text_response_profiles_top10_odd.pkl",
+      "bytes": 60634531,
+      "sha256": "cb8db23385335fcd51a08c5bf09675f8d5ca9a1a51bf65080af709d142fedfe6"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/response_profiles/multiple_demand_text_response_profiles_top10_even.pkl",
+      "bytes": 8264991,
+      "sha256": "69deebbaf143d17d3b3c1b0bb6e03cee02d9a11f18b7f77bfc703880e3ef42ca"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/response_profiles/multiple_demand_text_response_profiles_top10_odd.pkl",
+      "bytes": 5480199,
+      "sha256": "675cf000d1301b7d7f313e6c5494ff3dcaedff9576b15d14f080063e1962fbcd"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/response_profiles/theory_of_mind_text_response_profiles_top10_even.pkl",
+      "bytes": 5364888,
+      "sha256": "00e49e5abb7229ebdc1531152c664fddd1fa1b944b432c1e8dfad04c05b77cd0"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/response_profiles/theory_of_mind_text_response_profiles_top10_odd.pkl",
+      "bytes": 3667249,
+      "sha256": "3da8c89ba8a85d7e20d177b7137f5a0617db9db20ab3b29d115214d04aa583f3"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/ablation/similarity_ablation_results_top5_stimulate=True_v3.json",
+      "bytes": 334860,
+      "sha256": "8df1c56993d183d7e78c39b5f30899de99dbce38dae1c2208c1762b184ddeeb6"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/ablation/similarity_ablation_results_top10_stimulate=True_v3.json",
+      "bytes": 334113,
+      "sha256": "9cce71af2cdce0d4e99b9fab602fc89d9d00a0c0956a58021806a1de5e6a66c3"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/ablation/similarity_ablation_results_top15_stimulate=True_v3.json",
+      "bytes": 335904,
+      "sha256": "87479951ec0884c956e5ddc8595c0ecc0a24c08a1c278c7faa480bcbe6c0ca9a"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/ablation/similarity_ablation_results_top20_stimulate=True_v3.json",
+      "bytes": 338381,
+      "sha256": "bcc81576b74053b4c8174ff7218bb000cb1cb1a6dcc9587600476403c8f8523e"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/ablation/similarity_ablation_results_top25_stimulate=True_v3.json",
+      "bytes": 340116,
+      "sha256": "b8bea2bccfbd728f815df7c8fe01d3ec978ebff0bbd91d20b94c1ead65ae1374"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/ablation/similarity_ablation_results_top30_stimulate=True_v3.json",
+      "bytes": 342082,
+      "sha256": "accfe6004d99349771d4a6cfab5549f06caf8dad294aa3f1055c163ca71a8915"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/ablation/similarity_ablation_results_top10_stimulate=False_v4.json",
+      "bytes": 314802,
+      "sha256": "b5463f3443ccd49a8ed179998d068f7ab78fa163dfd94204fa854af68d45e4e1"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/ablation/similarity_no_ablation_results_v4.json",
+      "bytes": 70554,
+      "sha256": "ba1066539ecc72e54dccb1d5fee8f906046e70c7d7eda6c3458d200196d35c5a"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/spacetop_clusters_figures/05/cluster_05_t_map.npy",
+      "bytes": 1245312,
+      "sha256": "f8b3d5ea5ea9294678adcac1abb6925d82770088afb88171f3de07d25e7ddcdb"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/spacetop_clusters_figures/32/cluster_32_t_map.npy",
+      "bytes": 1245312,
+      "sha256": "83a6f5869ae2ea04b78dc28b7767121a24d21d2c0ad652ce250e17efc0afa0fe"
+    },
+    {
+      "path": "topo-omni-cut/topo-omni/spacetop_clusters_figures/island_morans_I_results_rating_contrast_vs_ratingv0_significant_topk=1_audio=True_smooth=True_fwhm=8.json",
+      "bytes": 167966,
+      "sha256": "f37d972e82f77ebe6440fc8ea0813ac93797791d11fb8c27c7e9bb368c8894bf"
+    },
+    {
+      "path": "topo-omni-cut/spacetop_discovery/cluster_selectivity_scores_v1.json",
+      "bytes": 23998,
+      "sha256": "84bb679d6c81ed87fddfed6b8f48119e25cbdbdfbf629bbce934358534d789f5"
+    }
+  ]
+}

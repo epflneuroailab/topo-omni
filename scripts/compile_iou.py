@@ -16,7 +16,7 @@ if __name__ == "__main__":
 
     group_ids = ["G1", "G2", "G3"]
 
-    dirpath = f"{SAVE_DIR}/qwen2_5_3b_spatial_task_final_7/spacetop_clusters_iou"
+    dirpath = f"{SAVE_DIR}/topo-omni/spacetop_clusters_iou"
     results = {}
     for group_id in group_ids:
         files = glob(os.path.join(dirpath, f"{group_id}_*", "iou_summary_*.csv"))

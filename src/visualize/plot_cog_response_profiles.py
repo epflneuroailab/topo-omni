@@ -85,7 +85,7 @@ if __name__ == "__main__":
 
     top_k = args.top_k_pct  # top k percent of units to keep
 
-    model_name = "qwen2_5_3b_spatial_task_final_7"
+    model_name = "topo-omni"
     save_dir = f"{SAVE_DIR}/{model_name}/response_profiles"
 
     results_path = f"{save_dir}/{localizer}_response_profiles_top{top_k}_even.pkl"

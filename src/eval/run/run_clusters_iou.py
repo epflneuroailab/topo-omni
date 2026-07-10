@@ -59,7 +59,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 SAVE_DIR = os.getenv("SAVE_DIR")
-MODEL_NAME = "qwen2_5_3b_spatial_task_final_7"
+MODEL_NAME = "topo-omni"
 
 CONTRAST_DIR = Path(f"{SAVE_DIR}/{MODEL_NAME}/spacetop_clusters_figures")
 OUTPUT_DIR = Path(f"{SAVE_DIR}/{MODEL_NAME}/spacetop_clusters_iou")

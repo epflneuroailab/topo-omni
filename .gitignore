@@ -1,0 +1,32 @@
+# --- secrets / local env ---
+.env
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# --- reproduction outputs (regenerated, never committed) ---
+figures_out/
+outputs/
+results/
+# downloaded precomputed cut + reference renders (see download_precomputed.py)
+_precomputed_cut/
+_reference_figures/
+_zip_cache/
+data/cut
+data/figs
+data/figures
+
+# --- model weights / large artifacts ---
+*.safetensors
+*.pt
+ckpts/
+neighborhoods/
+positions/
+
+# --- os cruft ---
+.DS_Store
+
+# NOTE: fMRI/ has its own .gitignore; this file covers the model side only.

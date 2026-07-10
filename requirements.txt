@@ -12,6 +12,7 @@ moviepy==2.2.1
 numpy==2.4.4
 omegaconf==2.3.0
 opencv_python_headless==4.13.0.92
+osfclient>=0.0.5
 pandas==3.0.2
 peft==0.18.0
 Pillow==12.2.0
@@ -23,7 +24,7 @@ scikit_learn==1.8.0
 scipy==1.17.1
 seaborn==0.13.2
 sentence_transformers==5.3.0
-skimage==0.0
+scikit_image==0.25.2
 torch==2.9.1
 tqdm==4.67.1
 transformers==4.57.6

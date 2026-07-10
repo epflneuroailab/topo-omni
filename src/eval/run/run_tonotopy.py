@@ -16,8 +16,7 @@ from glob import glob
 from omegaconf import OmegaConf
 
 from qwen_omni_utils import process_mm_info
-from transformers import Qwen2_5OmniProcessor, Qwen2_5OmniThinkerConfig
-from src.models.qwen2_5_omni import Qwen2_5OmniThinkerForConditionalGeneration
+from src.core.model_loading import load_topo_omni, unified_grid_coords
 from src.utils.smoothing import NeuronSmoothingConv
 
 
@@ -405,7 +404,7 @@ def main():
     output_root   = str(cfg.run.output_root)
     do_pretrained = bool(cfg.run.get("do_pretrained", False))
 
-    run_dir       = Path(cfg.model.run_dir).resolve()
+    model_override = cfg.model.get("model", None)
     device        = str(cfg.model.device)
 
     mode          = str(cfg.data.mode).lower()      # "text" or "image"
@@ -420,9 +419,6 @@ def main():
     resolution_mm = float(cfg.stats.resolution_mm)
     topk_pct      = float(cfg.stats.get("topk_pct", 0.0))
 
-    neighborhood_dir = str(cfg.model.get("neighborhood_dir", None))
-
-
     outdir = Path(output_root) / run_title / category_name
     outdir.mkdir(parents=True, exist_ok=True)
 
@@ -433,25 +429,9 @@ def main():
 
     if not os.path.exists(cache_path):
 
-        print(f"> Loading processor & config from: {run_dir}")
-        processor = Qwen2_5OmniProcessor.from_pretrained(run_dir)
-        model_config = Qwen2_5OmniThinkerConfig.from_pretrained(run_dir)
-    
-        model_config.audio_config.is_training = False
-        model_config.vision_config.is_training = False
-        model_config.text_config.is_training = False
-        model_config.apply_spatial_loss = True
-
-        print(f"> Loading model from: {run_dir}")
-        model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
-            run_dir,
-            config=model_config,
-            device_map=None,
-            torch_dtype=torch.bfloat16 if device.startswith("cuda") else torch.float32,
+        model, processor, _ = load_topo_omni(
+            model=model_override, device=device, baseline=do_pretrained
         )
-    
-        model.to(device)
-        model.eval()
 
         cortical_sheets = extract_features_for_audio(
             model, processor, stimuli_paths,
@@ -465,7 +445,7 @@ def main():
         print(f"> Loading cached cortical sheets from: {cache_path}")
         cortical_sheets = np.load(cache_path)
 
-    coords_lm = np.load(os.path.join(neighborhood_dir, "coords.npy"))
+    coords_lm = unified_grid_coords()
 
     cortical_sheets = cortical_sheets.reshape(len(freqs_hz), -1, cortical_sheets.shape[-1])
 

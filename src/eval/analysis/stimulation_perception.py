@@ -152,7 +152,7 @@ if __name__ == "__main__":
     # prompt_template = "Does the following sentence describe {stimuli}?\nAnswer only with Yes or No.\n\nSentence: {sentence}\nAnswer:"
     prompt_template = "What does the following sentence describe?\nOptions: {options}\n\nSentence: {sentence}\nAnswer:"
 
-    model_name = "qwen2_5_3b_spatial_task_final_7"
+    model_name = "topo-omni"
     path_template = "ablation/ablation_stimuli={stimuli}_localizer={localizer}_perc={perc}_stimulate={stimulate}_v3"
 
     percentage = 5

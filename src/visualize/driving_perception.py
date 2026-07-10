@@ -18,7 +18,7 @@ color_palette = sns.color_palette(["#E64B35", "#F39B2F", "#F1C232", "#EFC94C"])
 
 if __name__ == "__main__":
 
-    model_name = "qwen2_5_3b_spatial_task_final_7"
+    model_name = "topo-omni"
     dirpath = f"{SAVE_DIR}/{model_name}/ablation"
     path_template = "similarity_ablation_results_top{percentage}_stimulate=True_v3.json"
 

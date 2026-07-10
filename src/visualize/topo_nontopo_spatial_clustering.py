@@ -17,7 +17,7 @@ def read_json(filepath):
 
 if __name__ == "__main__":
 
-    topo_model_name = "qwen2_5_3b_spatial_task_final_7"
+    topo_model_name = "topo-omni"
     non_topo_model_name = "qwen2_5_3b_task_7"
 
     localizers = [

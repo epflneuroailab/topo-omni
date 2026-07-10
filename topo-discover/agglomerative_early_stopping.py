@@ -9,13 +9,13 @@ import scipy.stats as stats
 
 from scipy.cluster.hierarchy import linkage, fcluster
 
-from transformers import Qwen2_5OmniProcessor, Qwen2_5OmniThinkerConfig
-
 from qwen_omni_utils import process_mm_info
 
+# topo-discover/ is not an importable package (hyphen), so put the repo root on the path
+# and import the shared model loader from src.core (works whether run from the repo root or here).
 import sys
-sys.path.append("../src")
-from models.qwen2_5_omni import Qwen2_5OmniThinkerForConditionalGeneration
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.core.model_loading import load_topo_omni
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -33,24 +33,8 @@ def load_pickle(path):
     with open(path, 'rb') as f:
         return pkl.load(f)
 
-def load_model_and_processor(run_dir, device="cuda"):
-    processor = Qwen2_5OmniProcessor.from_pretrained(run_dir)
-    model_config = Qwen2_5OmniThinkerConfig.from_pretrained(run_dir)
-
-    model_config.audio_config.is_training = False
-    model_config.vision_config.is_training = False
-    model_config.text_config.is_training = False
-    model_config.apply_spatial_loss = True
-
-    model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
-        run_dir,
-        config=model_config,
-        device_map=torch.device(device),
-        torch_dtype=torch.bfloat16 if device.startswith("cuda") else torch.float32,
-    )
-
-    model.eval()
-    model.bfloat16()
+def load_model_and_processor(model=None, device="cuda"):
+    model, processor, _ = load_topo_omni(model=model, device=device)
     return model, processor
 
 def read_json(file_path):
@@ -365,8 +349,7 @@ if __name__ == "__main__":
         tree = load_pickle(linkage_path)
     else:
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        model_path = os.path.join(CKPT_DIR, "qwen2_5_3b_spatial_task_final_7")
-        model, processor = load_model_and_processor(model_path, device=device)
+        model, processor = load_model_and_processor(device=device)
         tree = cluster_with_early_stopping(model, processor, embeddings, file_names, cluster_score_fn, main_output_dir)
         print(f"Number of clusters: {len(tree)}")
         # assert sum(len(c) for c in tree) == len(file_names)

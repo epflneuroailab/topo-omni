@@ -33,8 +33,7 @@ from omegaconf import OmegaConf
 from scipy.stats import f_oneway, false_discovery_control
 
 from qwen_omni_utils import process_mm_info
-from transformers import Qwen2_5OmniProcessor, Qwen2_5OmniThinkerConfig
-from src.models.qwen2_5_omni import Qwen2_5OmniThinkerForConditionalGeneration
+from src.core.model_loading import load_topo_omni, unified_grid_coords
 from src.utils.smoothing import NeuronSmoothingConv
 
 
@@ -234,9 +233,8 @@ def main():
     category_name    = str(cfg.run.category_name)
     output_root      = str(cfg.run.output_root)
 
-    run_dir          = Path(cfg.model.run_dir).resolve()
+    model_override   = cfg.model.get("model", None)
     device           = str(cfg.model.device)
-    neighborhood_dir = str(cfg.model.get("neighborhood_dir", None))
 
     stimuli_root     = Path(cfg.data.stimuli_root).resolve()
     batch_size       = int(cfg.data.batch_size)
@@ -257,24 +255,7 @@ def main():
     cache_path = outdir / "cortical_sheets.npy"
 
     if not os.path.exists(cache_path):
-        print(f"> Loading processor & config from: {run_dir}")
-        processor = Qwen2_5OmniProcessor.from_pretrained(run_dir)
-        model_config = Qwen2_5OmniThinkerConfig.from_pretrained(run_dir)
-
-        model_config.audio_config.is_training = False
-        model_config.vision_config.is_training = False
-        model_config.text_config.is_training = False
-        model_config.apply_spatial_loss = True
-
-        print(f"> Loading model from: {run_dir}")
-        model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
-            run_dir,
-            config=model_config,
-            device_map=None,
-            torch_dtype=torch.bfloat16 if device.startswith("cuda") else torch.float32,
-        )
-        model.to(device)
-        model.eval()
+        model, processor, _ = load_topo_omni(model=model_override, device=device)
 
         cortical_sheets = extract_features_for_images(
             model, processor, image_paths,
@@ -287,7 +268,7 @@ def main():
         print(f"> Loading cached cortical sheets from: {cache_path}")
         cortical_sheets = np.load(cache_path)
 
-    coords_lm = np.load(os.path.join(neighborhood_dir, "coords.npy"))
+    coords_lm = unified_grid_coords()
 
     # (N_total, n_units) -> (n_ecc, n_exemplars, n_units)
     cortical_sheets = cortical_sheets.reshape(n_ecc, n_exemplars, cortical_sheets.shape[-1])

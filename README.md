@@ -30,7 +30,14 @@ The approach builds on [TDANN](https://github.com/neuroailab/TDANN) and [TopoLM]
 
 ```
 topo-omni/
+├── make_all_figures.py          # orchestrator: reproduce all model-side figures (precomputed|raw)
+├── download_precomputed.py      # fetch the precomputed cut from OSF (+ sha256 verify)
+├── reproduce_precomputed_figures.sh  # one-command precomputed reproduction
+├── .env.example                 # environment template (copy to .env)
 ├── src/
+│   ├── core/
+│   │   ├── model_loading.py      # load_topo_omni(): single HuggingFace/local model loader
+│   │   └── precomputed.py        # OSF cut fetch + sha256 verify
 │   ├── models/
 │   │   ├── qwen2_5_omni.py       # Modified Qwen2.5-Omni with cortical sheet output
 │   │   └── spatial_utils.py      # LayerPositions, spatial loss, neighborhood utilities
@@ -135,37 +142,65 @@ Each unit (neuron) has a fixed coordinate on this grid. The spatial loss compute
 pip install -r requirements.txt
 ```
 
-Create a `.env` file at the repo root (loaded via `python-dotenv`) with the following paths:
+Copy `.env.example` to `.env` at the repo root (loaded via `python-dotenv`) and fill in the paths
+you need. **For the default figure-reproduction path (precomputed) you need none of them** — only
+`SAVE_DIR` (where the downloaded cut lands) is used, and the reproduce script sets it for you. The
+other paths matter only for the `raw` recompute path and for training. The trained model is loaded
+from HuggingFace (`epfl-neuroai/topo-omni`) by default, so no checkpoint download is required.
 
-```env
-WANDB_API_KEY=...
-DATA_DIR=/path/to/video/data
-STIMULI_DIR=/path/to/stimuli
-CKPT_DIR=/path/to/checkpoints
-SAVE_DIR=/path/to/save/outputs
-REPO_DIR=/path/to/repo
+---
+
+## Reproducing the paper figures
+
+The model-side figure panels (Fig 2b/c, 3, 4, 5, 6, 7) reproduce via **two clearly separated
+paths**, mirroring the brain-side [`fMRI/`](fMRI/) subproject — see [`docs/DESIGN.md`](docs/DESIGN.md)
+for the rationale and a per-panel input-availability table.
+
+**1. Precomputed (default, recommended)** — plot from a hosted cut of model outputs. No GPU, no
+stimuli, no model download.
+
+```bash
+./reproduce_precomputed_figures.sh            # download cut from OSF + render all figures
+./reproduce_precomputed_figures.sh 3 4        # a subset
+
+# …or the two steps by hand:
+python download_precomputed.py --dest _precomputed_cut
+python make_all_figures.py --input-source precomputed --derivatives-root _precomputed_cut
 ```
+
+Panels land in `figures_out/figure_<id>/`.
+
+**2. Raw (opt-in)** — download the model from HuggingFace and recompute from stimuli (needs a GPU).
+Fully wired where inputs are public (the retinotopy/tonotopy stimulus banks self-generate); panels
+whose localizer stimuli aren't redistributable read from a `STIMULI_DIR` you supply.
+
+```bash
+python make_all_figures.py --input-source raw --derivatives-root results --figures 3,4
+```
+
+Everything below documents the individual building blocks these two paths orchestrate.
 
 ---
 
 ## Usage
 
-All commands below are run from `src/`.
+Evaluation / figure commands are run from the **repo root** (module form, e.g.
+`python -m src.eval.run.…`). The **training** commands (steps 1–2) are run from inside `src/`.
 
-### 1. Initialize cortical coordinates
+### 1. Initialize cortical coordinates *(training only)*
 
 Pre-computes neighborhood structures for the spatial loss. Run once before training.
 
 ```bash
-python init_coords.py -c configs/init_coords.yml
+cd src && python init_coords.py -c configs/init_coords.yml
 ```
 
 This generates `.pkl` files under `src/neighborhoods/` keyed by model name, radius, and neighborhood count.
 
-### 2. Train
+### 2. Train *(training only)*
 
 ```bash
-bash scripts/train.sh configs/train.yml <num_gpus> accelerate_config.yml
+cd src && bash ../scripts/train.sh configs/train.yml <num_gpus> accelerate_config.yml
 ```
 
 Key config options (`configs/train.yml`):
@@ -189,20 +224,17 @@ Training logs to Weights & Biases when `--wandb` is passed.
 Tests whether specific regions on the cortical sheet are selective for a category (faces, bodies, objects, scenes, speech, etc.) versus control stimuli.
 
 ```bash
-python -m eval.run.run_selectivity --config configs/eval_marvi.yml
+python -m src.eval.run.run_selectivity --config src/configs/eval_marvi.yml
 ```
 
-Or launch a sweep across all categories:
+The model is loaded from HuggingFace (`epfl-neuroai/topo-omni`) by default; set `$TOPO_OMNI_MODEL`
+or `model.model` in the config to use a local checkpoint instead.
 
-```bash
-bash scripts/run_ablation.sh
-```
-
-Key config options (`configs/eval_marvi.yml`):
+Key config options (`src/configs/eval_marvi.yml`):
 
 | Key | Description |
 |-----|-------------|
-| `model.run_dir` | Checkpoint directory |
+| `model.model` | *(optional)* HF id or local checkpoint dir (default: `$TOPO_OMNI_MODEL`) |
 | `data.mode` | `video`, `image`, or `text` |
 | `data.stimuli_root` | Path to ON/OFF stimuli folders |
 | `data.lm_reduce` | Reduction over LM sheet (`mean`/`max`) |
@@ -224,16 +256,16 @@ Extract model activations for NSD (images) or SpaceTop (videos) fMRI datasets, t
 
 ```bash
 # NSD
-python -m eval.extract.extract_nsd
+python -m src.eval.extract.extract_nsd
 
 # SpaceTop
-python -m eval.extract.extract_spacetop
+python -m src.eval.extract.extract_spacetop --group-index 0
 ```
 
 Run correlation analysis:
 
 ```bash
-python -m eval.analysis.contrast_spacetop
+python -m src.eval.analysis.contrast_spacetop --cluster_id 32 --topk 1
 ```
 
 ### 6. Response profiles
@@ -250,19 +282,19 @@ These call into `eval/analysis/marvi_response_profiles.py` / `eval/analysis/cogn
 
 ### 7. Retinotopy and tonotopy mapping
 
-Map preferred visual-field position (eccentricity / polar angle) and preferred sound frequency across the cortical sheet, masking units that fail an ANOVA tuning test (FDR-corrected). Stimulus banks are generated with `utils/generate_retinotopy.py` and `utils/generate_frequencies.py`.
+Map preferred visual-field position (eccentricity / polar angle) and preferred sound frequency across the cortical sheet, masking units that fail an ANOVA tuning test (FDR-corrected). The stimulus banks **self-generate** (no data download), which makes these panels fully reproducible on the raw path with only a GPU:
 
 ```bash
-# Retinotopy (eccentricity + polar angle, or each individually)
-python -m eval.run.run_retinotopy       --config configs/eval_retinotopy.yml
-python -m eval.run.run_retinotopy_ecc   --config configs/eval_retinotopy.yml
-python -m eval.run.run_retinotopy_angle --config configs/eval_retinotopy.yml
+# 1. generate the (public) stimulus banks into $STIMULI_DIR
+python -m src.utils.generate_retinotopy     # -> $STIMULI_DIR/retino_bank/{*.png, manifest.csv}
+python -m src.utils.generate_frequencies    # -> $STIMULI_DIR/tone_bank/{*.wav, manifest.csv}
 
-# Tonotopy
-python -m eval.run.run_tonotopy --config configs/eval_tonotopy.yml
+# 2. run the model over them (produces the maps directly)
+python -m src.eval.run.run_retinotopy --config src/configs/eval_retinotopy.yml   # polar angle + eccentricity
+python -m src.eval.run.run_tonotopy   --config src/configs/eval_tonotopy.yml     # preferred frequency
 ```
 
-Plots are produced via `visualize/tonotopy.py` (and the corresponding retinotopy plotting code in `eval/run/run_retinotopy*.py`).
+(The single-axis variants `run_retinotopy_ecc` / `run_retinotopy_angle` expect `eccentricity/` and `angle/` sub-banks instead of the combined `retino_bank`.)
 
 ### 8. Cluster IoU
 

@@ -7,10 +7,8 @@ from moviepy import VideoFileClip
 
 from tqdm import tqdm
 from glob import glob
-from transformers import Qwen2_5OmniProcessor, Qwen2_5OmniThinkerConfig
-
 from qwen_omni_utils import process_mm_info
-from models.qwen2_5_omni import Qwen2_5OmniThinkerForConditionalGeneration
+from src.core.model_loading import load_topo_omni, MODEL_TITLE
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -73,10 +71,9 @@ if __name__ == "__main__":
 
     np.random.seed(42)
 
-    model_name = "qwen2_5_3b_spatial_task_final_7"
-    MODEL_ID = f"{CKPT_DIR}/{model_name}"
+    model_name = MODEL_TITLE
     DATA_DIR = f"{STIMULI_DIR}/spacetop_audio/cluster_clips"
-    SAVE_DIR = f"results/{model_name}/spacetop_clusters"
+    SAVE_DIR = f"{os.getenv('SAVE_DIR', 'results')}/{model_name}/spacetop_clusters"
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
     os.makedirs(SAVE_DIR, exist_ok=True)
@@ -84,24 +81,7 @@ if __name__ == "__main__":
     cluster_files = sorted(glob(f"{DATA_DIR}/*/*.mp4"))
     cluster_files = np.array_split(cluster_files, 10)[group_index]
 
-    model_config = Qwen2_5OmniThinkerConfig.from_pretrained(MODEL_ID)
-
-    model_config.audio_config.is_training = False
-    model_config.vision_config.is_training = False
-    model_config.text_config.is_training = False
-
-    # default: Load the model on the available device(s)
-    model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
-        f"{MODEL_ID}", 
-        dtype='auto', 
-        device_map="auto",
-        config=model_config,
-    )
-
-    model.eval()
-    model.bfloat16()
-
-    processor = Qwen2_5OmniProcessor.from_pretrained(MODEL_ID)
+    model, processor, _ = load_topo_omni(device=DEVICE)
     for cluster_file in tqdm(cluster_files):
         cluster_id = os.path.basename(os.path.dirname(cluster_file))
         filename = os.path.basename(cluster_file).replace(".mp4", "")

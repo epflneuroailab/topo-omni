@@ -28,7 +28,7 @@ def eval_condition(config):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name", default="qwen2_5_3b_spatial_task_final_7")
+    parser.add_argument("--model_name", default="topo-omni")
     parser.add_argument("--config_path", default='src/configs/eval_marvi.yml')
     parser.add_argument("--odd_or_even", default=None, choices=["odd", "even", None])
     parser.add_argument("--no-smooth", action="store_true", help="smooth")

@@ -331,7 +331,7 @@ def main():
     )
     args = parser.parse_args()
 
-    model_name = "qwen2_5_3b_spatial_task_final_7"
+    model_name = "topo-omni"
     data_dir = f"{SAVE_DIR}/{model_name}/spacetop_clusters_figures"
     input_json = os.path.join(data_dir, args.input_json)
     output_path = os.path.join(data_dir, args.output_path)

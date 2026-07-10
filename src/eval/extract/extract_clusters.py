@@ -1,3 +1,4 @@
+import os
 import json
 import numpy as np
 import pickle as pkl
@@ -7,8 +8,8 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import binary_opening
 
 from skimage import measure
-from utils.connected_components import label_islands, island_stats, print_stats, keep_only_id
-from utils.island_morans_I import island_morans_I
+from src.utils.connected_components import label_islands, island_stats, print_stats, keep_only_id
+from src.utils.island_morans_I import island_morans_I
 
 def remove_small_components(mask, min_size):
     labeled = measure.label(mask)
@@ -46,7 +47,7 @@ if __name__ == "__main__":
         # ("multiple_demand_text", "cognitive", "viridis"),
     ]
 
-    dirpath = "results/qwen2_5_3b_spatial_task_final_7"
+    dirpath = f"{os.getenv('SAVE_DIR', 'results')}/topo-omni"
 
     anatomical_constraint = True
     filter_out_non_significant = False

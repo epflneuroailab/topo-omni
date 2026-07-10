@@ -7,13 +7,18 @@ import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description="Plot model selectivity scores for each cluster.")
-    parser.add_argument("--model_name", type=str, default="qwen2_5_3b_spatial_task_final_7", help="Model name to evaluate")
+    parser = argparse.ArgumentParser(description="Plot per-cluster model selectivity scores (Fig 2c).")
+    parser.add_argument("--model_name", type=str, default="topo-omni", help="Model name to evaluate")
+    parser.add_argument("--scores-path", type=str,
+                        default="task-alignvideo/clustering_v2/cluster_selectivity_scores_v1.json",
+                        help="Path to cluster_selectivity_scores_v1.json.")
+    parser.add_argument("--out-dir", type=str, default=".", help="Output directory for the figure.")
     args = parser.parse_args()
 
     model_name = args.model_name
 
-    selectivity_scores_path = f"task-alignvideo/clustering_v2/cluster_selectivity_scores_v1.json"
+    selectivity_scores_path = args.scores_path
+    os.makedirs(args.out_dir, exist_ok=True)
 
     with open(selectivity_scores_path, 'r') as f:
         selectivity_scores = json.load(f)
@@ -78,7 +83,7 @@ if __name__ == "__main__":
         ax.set_title(f"Model Selectivity Scores for Topo-Omni")
         # plt.legend(title="Cluster in Brain", bbox_to_anchor=(1.05, 1), loc='upper left')
         plt.tight_layout()
-        plt.savefig(f"topoomni_selectivity_scores_v1_{metric}.png", dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(args.out_dir, f"topoomni_selectivity_scores_v1_{metric}.png"), dpi=300, bbox_inches='tight')
         plt.clf()
         plt.cla()
         plt.close()

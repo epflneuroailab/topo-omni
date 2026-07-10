@@ -17,17 +17,13 @@ Supports two modes, specified in a YAML config:
 
      Computes selectivity on both LM and VIS cortical sheets (faces vs non-faces type).
 
-The script expects:
-  - A trained run directory with:
-       model_full.safetensors
-       config.json     (TopoQwen2VL config)
-       processor files (Qwen2VLProcessor.from_pretrained(run_dir))
-
-  - A YAML config file with keys:
-      run:   {run_title, category_name, output_root}
-      model: {run_dir, device}
-      data:  {mode, stimuli_root, batch_size, lm_reduce, vis_reduce}
-      stats: {alpha, smooth, fwhm_mm, resolution_mm}
+The model is loaded via ``src.core.model_loading.load_topo_omni`` (HuggingFace
+``epfl-neuroai/topo-omni`` by default; override with ``model.model`` in the config or
+``$TOPO_OMNI_MODEL``). The script expects a YAML config file with keys:
+      run:   {run_title, category_name, output_root, do_pretrained, overwrite}
+      model: {device, model (optional)}
+      data:  {mode, stimuli_root, batch_size, lm_reduce, vis_reduce, odd_or_even}
+      stats: {alpha, smooth, fwhm_mm, resolution_mm, topk_pct}
 """
 
 import json
@@ -48,8 +44,7 @@ from omegaconf import OmegaConf
 from tqdm import tqdm
 
 from qwen_omni_utils import process_mm_info
-from transformers import Qwen2_5OmniProcessor, Qwen2_5OmniThinkerConfig
-from src.models.qwen2_5_omni import Qwen2_5OmniThinkerForConditionalGeneration
+from src.core.model_loading import load_topo_omni, unified_grid_coords
 from src.utils.island_morans_I import island_morans_I
 from src.utils.smoothing import NeuronSmoothingConv
 
@@ -533,7 +528,7 @@ def maybe_hrf_project(feats: np.ndarray,
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="configs/evaluation.yml",
+    parser.add_argument("--config", type=str, default="src/configs/eval_marvi.yml",
                         help="Path to YAML config for selectivity analysis.")
     args = parser.parse_args()
 
@@ -545,9 +540,9 @@ def main():
     do_pretrained = bool(cfg.run.get("do_pretrained", False))
     overwrite     = bool(cfg.run.get("overwrite", False))
 
-    run_dir       = Path(cfg.model.run_dir).resolve()
+    # HF repo id or local checkpoint dir; defaults to $TOPO_OMNI_MODEL / epfl-neuroai/topo-omni.
+    model_override = cfg.model.get("model", None)
     device        = str(cfg.model.device)
-    neighborhood_dir = str(cfg.model.get("neighborhood_dir", None))
 
     mode          = str(cfg.data.mode).lower()      # "text" or "image"
     stimuli_root  = Path(cfg.data.stimuli_root).resolve()
@@ -565,16 +560,6 @@ def main():
     outdir = Path(output_root) / run_title / category_name
     outdir.mkdir(parents=True, exist_ok=True)
 
-    if do_pretrained:
-        run_dir = "Qwen/Qwen2.5-Omni-3B"
-        print("> Loading FULL (Non-Topo) Qwen2.5-Omni model")
-    else:
-        print("> Loading FULL TopoQwen2.5-Omni model")
-
-    print(f"> Loading processor & config from: {run_dir}")
-    processor = Qwen2_5OmniProcessor.from_pretrained(run_dir)
-    model_config = Qwen2_5OmniThinkerConfig.from_pretrained(run_dir)
-
     cache_dir = outdir / "cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
     if odd_or_even is not None:
@@ -582,23 +567,13 @@ def main():
 
     dump_pickle_path = cache_dir / f"selectivity_{category_name}_features.pkl"
 
+    # The model is only needed to (re)extract features; on a cache hit we plot from the
+    # cached cortical sheets and never touch the GPU / HuggingFace.
+    model = processor = None
     if not os.path.exists(dump_pickle_path) or overwrite:
-        model_config.audio_config.is_training = False
-        model_config.vision_config.is_training = False
-        model_config.text_config.is_training = False
-        model_config.apply_spatial_loss = True
-
-        model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
-            run_dir,
-            config=model_config,
-            device_map=torch.device(device),
-            torch_dtype=torch.bfloat16 if device.startswith("cuda") else torch.float32,
+        model, processor, _ = load_topo_omni(
+            model=model_override, device=device, baseline=do_pretrained
         )
-    
-        if do_pretrained:
-            model.init_cortical_layers(epsilon=0, identity=True)
-
-        model.to(device).eval()
 
     if mode == "text":
         print("> Mode: TEXT")
@@ -680,10 +655,9 @@ def main():
         )
         print(f"✓ cached features to {dump_pickle_path}")
 
-    if not os.path.exists(dump_pickle_path):
-        coords_lm = model.positions[f'unified_sheet'].coordinates
-    else:
-        coords_lm = np.load(os.path.join(neighborhood_dir, "coords.npy"))
+    # Unit coordinates are the fixed 304x512 grid (row-major), so we derive them
+    # deterministically instead of reading a training-time coords.npy artifact.
+    coords_lm = unified_grid_coords()
 
     category_name += f"_fwhm{fwhm_mm:.1f}" if smoother is not None else ""
 

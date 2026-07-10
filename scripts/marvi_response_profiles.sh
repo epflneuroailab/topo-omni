@@ -2,7 +2,7 @@ top_k_pct=${1:-1}
 fwhm_mm=${2:-4}
 anatomical_constraint=${3:-true}
 
-model_name="qwen2_5_3b_spatial_task_final_7"
+model_name="topo-omni"
 # model_name="qwen2_5_3b_task_7"
 
 localizers=(faces scenes objects vwfa bodies speech)

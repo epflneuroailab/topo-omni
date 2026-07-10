@@ -15,8 +15,7 @@ from skimage import measure
 import concurrent.futures
 
 from qwen_omni_utils import process_mm_info
-from transformers import Qwen2_5OmniProcessor, Qwen2_5OmniThinkerConfig
-from models.qwen2_5_omni import Qwen2_5OmniThinkerForConditionalGeneration
+from src.core.model_loading import load_topo_omni, MODEL_TITLE
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -112,34 +111,8 @@ def extract_features_for_images(
     return cortical_sheets
 
 
-def load_model(run_dir, device_str="cuda"):
-    is_baseline = "baseline" in run_dir
-
-    if is_baseline:
-        run_dir = "Qwen/Qwen2.5-Omni-3B"
-
-    print(f"> Loading processor & config from: {run_dir}")
-    processor = Qwen2_5OmniProcessor.from_pretrained(run_dir)
-    model_config = Qwen2_5OmniThinkerConfig.from_pretrained(run_dir)
-
-    model_config.audio_config.is_training = False
-    model_config.vision_config.is_training = False
-    model_config.text_config.is_training = False
-    model_config.apply_spatial_loss = True
-
-    model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
-        run_dir,
-        config=model_config,
-        device_map=None,
-        torch_dtype=torch.bfloat16 if device_str.startswith("cuda") else torch.float32,
-    )
-
-    model.to(device_str)
-    model.eval()
-
-    if is_baseline:
-        model.init_cortical_layers(epsilon=0, identity=True)
-    
+def load_model(model=None, device_str="cuda", baseline=False):
+    model, processor, _ = load_topo_omni(model=model, device=device_str, baseline=baseline)
     return model, processor
 
 def dump_hdf5(data, hdf5_path):
@@ -213,11 +186,12 @@ def parallelize_feature_extraction(
     top_k_pcts,
     anatomical_constraint,
     W, H,
+    baseline=False,
 ):
 
     save_batch_size = 256
 
-    model, processor = load_model(f"{CKPT_DIR}/{model_name}")
+    model, processor = load_model(baseline=baseline)
 
     hdf5_path = f"{STIMULI_DIR}/nsd_stimuli.hdf5"
 
@@ -303,8 +277,10 @@ if __name__ == "__main__":
         "speech",
     ]
 
-    model_name = "qwen2_5_3b_spatial_task_final_7"
-    model_name = "qwen2_5_3b_task_7"
+    # Topographic model by default. For the non-topo control, set baseline=True below
+    # and model_name=BASELINE_TITLE (its precomputed selectivity stats live under that title).
+    model_name = MODEL_TITLE
+    baseline = False
     dirpath = f"{SAVE_DIR}/{model_name}"
 
     anatomical_constraint = False
@@ -335,6 +311,7 @@ if __name__ == "__main__":
         anatomical_constraint=anatomical_constraint,
         W=W,
         H=H,
+        baseline=baseline,
     )
 
 

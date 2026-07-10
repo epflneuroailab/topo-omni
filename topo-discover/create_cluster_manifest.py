@@ -38,7 +38,7 @@ if __name__ == "__main__":
     video_lists = read_json("task-alignvideo/clustering_v2/clips_manifest.json")
     video_to_num_chunks = get_num_chunks(video_lists)
 
-    merged_clusters = read_json("task-alignvideo/clustering_v2/merged_clusters_tvals_v2.json")
+    merged_clusters = read_json("task-alignvideo/clustering_v2/merged_clusters_tvals_v3.json")
 
     videos = glob("task-alignvideo/*.mp4")
     video_durations = {}
@@ -65,7 +65,7 @@ if __name__ == "__main__":
                 "end_time": (chunk_num + 1) * 2,
             }
 
-    with open("task-alignvideo/clustering_v2/merged_clusters_tvals_with_video_info_v2.json", "w") as f:
+    with open("task-alignvideo/clustering_v2/merged_clusters_tvals_with_video_info_v3.json", "w") as f:
         json.dump(merged_clusters, f, indent=4)
 
 

@@ -77,7 +77,7 @@ if __name__ == "__main__":
     
     import argparse
     parser = argparse.ArgumentParser(description="Evaluate response profiles for different conditions.")
-    parser.add_argument("--model_name", type=str, default="qwen2_5_3b_spatial_task_final_7", help="Model name to evaluate")
+    parser.add_argument("--model_name", type=str, default="topo-omni", help="Model name to evaluate")
     parser.add_argument("--localizer", type=str, default="faces", help="Localizer condition to evaluate (e.g., faces, bodies, scenes)")
     parser.add_argument("--top_k_pct", type=int, default=1, help="Top k percent of units to keep")
     parser.add_argument("--fwhm_mm", type=float, default=4.0, help="FWHM in mm for smoothing the cortical sheet")

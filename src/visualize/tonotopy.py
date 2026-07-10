@@ -151,7 +151,7 @@ if __name__ == "__main__":
 #     topk_pct = 10
 #     alpha = 0.001
 
-#     dirpath = f"{SAVE_DIR}/qwen2_5_3b_spatial_task_final_7/tonotopy"
+#     dirpath = f"{SAVE_DIR}/topo-omni/tonotopy"
 #     paths = glob(f"{dirpath}/stats_*.pkl")
 #     paths = sorted(paths, key=lambda x: int(x.split("freq=")[-1].split("Hz")[0]))
 #     paths = paths[::3] + [paths[-1]]  # take every 3rd frequency for better visualization

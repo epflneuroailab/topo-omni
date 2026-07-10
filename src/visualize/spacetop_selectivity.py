@@ -1,3 +1,4 @@
+import os
 import json
 import argparse
 import numpy as np
@@ -11,6 +12,7 @@ from scipy.ndimage import binary_opening
 from skimage import measure
 from src.utils.connected_components import label_islands, island_stats, print_stats, keep_only_id
 from src.utils.island_morans_I import island_morans_I
+from src.core.model_loading import MODEL_TITLE
 
 def remove_small_components(mask, min_size):
     labeled = measure.label(mask)
@@ -35,15 +37,17 @@ def write_json(data, filepath):
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description="Visualize selectivity maps for SpaceTop clusters.")
+    parser = argparse.ArgumentParser(description="Visualize selectivity maps for SpaceTop clusters (Fig 2c / 7).")
     parser.add_argument("--cluster_id", type=int, default=32, help="ID of the target cluster to visualize")
     parser.add_argument("--topk", type=int, default=1, help="Percentage of top-k significant units to consider")
+    parser.add_argument("--results-dir", default=os.path.join(os.getenv("SAVE_DIR", "results"), MODEL_TITLE, "spacetop_clusters_figures"),
+                        help="Directory with per-cluster t-maps (<dir>/<cluster_id>/cluster_<cluster_id>_t_map.npy).")
 
     args = parser.parse_args()
 
-    selectivity = [str(args.cluster_id).zfill(2)] 
+    selectivity = [str(args.cluster_id).zfill(2)]
 
-    dirpath = "results/qwen2_5_3b_spatial_task_final_7/spacetop_clusters_figures"
+    dirpath = args.results_dir
 
     anatomical_constraint = False
     filter_out_non_significant = False
@@ -74,49 +78,22 @@ if __name__ == "__main__":
 
         t_values_copy = t_values.copy()
 
-        # p_values = stats['q'].reshape(W, H)
-        # p_values = np.rot90(p_values, k=1)
-
-        if anatomical_constraint:
-            if modality in ["language", "cognitive"]:
-                t_values[144:, :] = np.nan
-            elif modality == "audio":
-                t_values[:144, :] = np.nan
-                t_values[144:, :256] = np.nan
-            elif modality == "vision":
-                t_values[:144, :] = np.nan
-                t_values[144:, 256:] = np.nan
-
         if np.isnan(t_values).any():
             t_values = np.nan_to_num(t_values, nan=-np.inf)
 
         t_values = t_values.flatten()
 
-        if anatomical_constraint:
-            if modality in ["language", "cognitive"]:
-                total_num_units = 144 * 512
-            elif modality == "audio":
-                total_num_units = 160 * 256
-            elif modality == "vision":
-                total_num_units = 160 * 256
-        else:
-            total_num_units = H * W
+        # Discovered clusters have no anatomical prior; rank over the whole sheet.
+        total_num_units = H * W
 
-    
-        if top_k_pct <= 0 or top_k_pct > 100:
-            selectivity_mask = (stats["q"] < p_value_threshold) & (stats["t"] > 0)
-            selectivity_mask = selectivity_mask.reshape(W, H)
-            selectivity_mask = np.rot90(selectivity_mask, k=1)
-        else:
+        active_num_units = (top_k_pct / 100) * total_num_units
 
-            active_num_units = (top_k_pct / 100) * total_num_units
+        t_values_indices_sorted = np.argsort(t_values)[::-1]
+        top_k_pct_indices = t_values_indices_sorted[:int(active_num_units)]
+        top_k_pct_mask = np.zeros_like(t_values, dtype=bool)
+        top_k_pct_mask[top_k_pct_indices] = True
 
-            t_values_indices_sorted = np.argsort(t_values)[::-1]
-            top_k_pct_indices = t_values_indices_sorted[:int(active_num_units)]
-            top_k_pct_mask = np.zeros_like(t_values, dtype=bool)
-            top_k_pct_mask[top_k_pct_indices] = True
-
-            selectivity_mask = top_k_pct_mask.reshape(H, W)
+        selectivity_mask = top_k_pct_mask.reshape(H, W)
 
 
         t_values = t_values.reshape(H, W)
@@ -210,6 +187,7 @@ if __name__ == "__main__":
         ax.set_xticks([])
         ax.set_yticks([])
 
+    os.makedirs(f"{dirpath}/{category}", exist_ok=True)
     if top_k_pct <= 0 or top_k_pct > 100:
         savepath = f"{dirpath}/{category}/selectivity_{category}_t_values_p{p_value_threshold}_anatomical={anatomical_constraint}_filternonsig={filter_out_non_significant}"
     else:

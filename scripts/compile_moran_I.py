@@ -24,7 +24,7 @@ TOP_K = 1
 
 if __name__ == "__main__":
 
-    model_name = "qwen2_5_3b_spatial_task_final_7"
+    model_name = "topo-omni"
     data_dir = f"{SAVE_DIR}/{model_name}/spacetop_clusters_figures"
 
     template_path = f"{data_dir}/*/island_morans_I_results_rating_audio={USE_AUDIO_PART}.json"

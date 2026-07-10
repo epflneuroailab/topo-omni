@@ -1,4 +1,6 @@
+import os
 import json
+import argparse
 import numpy as np
 import pickle as pkl
 import seaborn as sns
@@ -10,6 +12,7 @@ from scipy.ndimage import binary_opening
 from skimage import measure
 from src.utils.connected_components import label_islands, island_stats, print_stats, keep_only_id
 from src.utils.island_morans_I import island_morans_I
+from src.core.model_loading import MODEL_TITLE
 
 def remove_small_components(mask, min_size):
     labeled = measure.label(mask)
@@ -55,14 +58,27 @@ cmaps = {label: mcolors.LinearSegmentedColormap.from_list("custom", [color, "#E7
 
 if __name__ == "__main__":
 
+    parser = argparse.ArgumentParser(
+        description="Render the unified in-silico cortical sheet with all category localizers overlaid (Fig 2b / 3-5 maps).")
+    parser.add_argument("--results-dir", default=os.path.join(os.getenv("SAVE_DIR", "results"), MODEL_TITLE),
+                        help="Directory with per-category selectivity stats "
+                             "(<dir>/<category>/<category>_all_selectivity_stats.pkl).")
+    parser.add_argument("--out-dir", default=None,
+                        help="Output directory for the figure (default: <results-dir>/unified_map).")
+    parser.add_argument("--top-k-pct", type=float, default=10.0, help="Top-k%% most selective units to keep.")
+    parser.add_argument("--p-threshold", type=float, default=0.001, help="FDR q-value threshold.")
+    parser.add_argument("--no-anatomical", action="store_true", help="Disable the anatomical constraint.")
+    parser.add_argument("--filter-nonsig", action="store_true", help="Filter out non-significant units.")
+    args = parser.parse_args()
+
     selectivity = [
-        ("faces", "vision", "Faces"), 
-        ("bodies", "vision", "Bodies"), 
-        ("scenes", "vision", "Scenes"), 
-        ("objects", "vision", "Objects"), 
-        ("vwfa", "vision", "Words"), 
-        ("speech", "audio", "Quilted Speech"), 
-        ("vocals", "audio", "False Photo"), 
+        ("faces", "vision", "Faces"),
+        ("bodies", "vision", "Bodies"),
+        ("scenes", "vision", "Scenes"),
+        ("objects", "vision", "Objects"),
+        ("vwfa", "vision", "Words"),
+        ("speech", "audio", "Quilted Speech"),
+        ("vocals", "audio", "False Photo"),
         ("language_text", "language", "Nonwords"),
         ("theory_of_mind_text", "cognitive", "False Belief"),
         ("multiple_demand_text", "cognitive", "Math"),
@@ -72,15 +88,17 @@ if __name__ == "__main__":
         # ("multi_demand", "cognitive", "viridis"),
     ]
 
-    dirpath = "results/qwen2_5_3b_spatial_task_final_7"
+    dirpath = args.results_dir
+    out_dir = args.out_dir or os.path.join(dirpath, "unified_map")
+    os.makedirs(out_dir, exist_ok=True)
 
-    anatomical_constraint = True
-    filter_out_non_significant = False
+    anatomical_constraint = not args.no_anatomical
+    filter_out_non_significant = args.filter_nonsig
     overlay = False
     H, W = 304, 512  # unified sheet size
 
-    p_value_threshold = 0.001
-    top_k_pct = 10 # top k percent of units to keep
+    p_value_threshold = args.p_threshold
+    top_k_pct = args.top_k_pct # top k percent of units to keep
 
     island_morans_I_results = {}
 
@@ -252,9 +270,9 @@ if __name__ == "__main__":
         ax.set_yticks([])
 
     if top_k_pct <= 0 or top_k_pct > 100:
-        savepath = f"{dirpath}/unified_map/selectivity_unified_map_t_values_p{p_value_threshold}_anatomical={anatomical_constraint}_filternonsig={filter_out_non_significant}"
+        savepath = f"{out_dir}/selectivity_unified_map_t_values_p{p_value_threshold}_anatomical={anatomical_constraint}_filternonsig={filter_out_non_significant}"
     else:
-        savepath = f"{dirpath}/unified_map/selectivity_unified_map_t_values_top{top_k_pct}_anatomical={anatomical_constraint}_filternonsig={filter_out_non_significant}"
+        savepath = f"{out_dir}/selectivity_unified_map_t_values_top{top_k_pct}_anatomical={anatomical_constraint}_filternonsig={filter_out_non_significant}"
 
     fig.savefig(f"{savepath}.svg", format="svg", bbox_inches="tight")
     fig.savefig(f"{savepath}.png", dpi=300, bbox_inches="tight")

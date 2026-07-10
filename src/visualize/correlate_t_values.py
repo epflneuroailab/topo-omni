@@ -10,12 +10,12 @@ def read_json(json_path):
     return data
 
 if __name__ == "__main__":
-    # load all json files in the current directory
-    path = "results/spacetop_fmri_tvalues.csv"
+    save_root = os.getenv("SAVE_DIR", "results")
+    # human fMRI reference t-values (lives at the cut root, not under the model title)
+    path = f"{save_root}/spacetop_fmri_tvalues.csv"
     fmri_df = pd.read_csv(path, header=0)
 
-    # load all json files in the current directory
-    dirpath = "results/qwen2_5_3b_spatial_task_final_7/spacetop_clusters_figures"
+    dirpath = f"{save_root}/topo-omni/spacetop_clusters_figures"
     cluster_ids = np.arange(1, 15)
     model_data = []
     for cluster_id in cluster_ids:
@@ -54,7 +54,7 @@ if __name__ == "__main__":
         plt.xlabel(f"Model {stat}")
         plt.ylabel(f"fMRI {stat}")
         plt.title(f"Correlation between model {stat} and fMRI {stat}: {corr:.4f}")
-        plt.savefig(f"correlation_{stat}.png")
+        plt.savefig(f"{dirpath}/correlation_{stat}.png")
         plt.close()
         plt.cla()
         plt.clf()

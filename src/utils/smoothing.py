@@ -25,15 +25,14 @@ class NeuronSmoothingConv:
         self.fwhm_mm = fwhm_mm
         self.resolution_mm = resolution_mm
 
-        # Same sigma as your old code (in mm)
         self.sigma_mm = fwhm_mm / np.sqrt(8.0 * np.log(2.0))
         # Convert from mm to pixels (grid steps)
         self.sigma_pix = self.sigma_mm / resolution_mm
 
-        cache_dir = "/mnt/u14157_ic_nlp_001_files_nfs/nlpdata1/home/bkhmsi/topoomni/cache"
-        self.gridx = np.load(f"{cache_dir}/gridx.npy")
-        self.gridy = np.load(f"{cache_dir}/gridy.npy")
-        self.height, self.width = _hrf_grid_shape(self.gridx, self.gridy)
+        # Grid shape (rows x cols) of the unified cortical sheet. Defaults to the fixed sheet
+        # size and is refined in __call__ to match the coordinates actually passed in, so no
+        # precomputed grid cache is needed.
+        self.height, self.width = 304, 512
 
     def __call__(self, positions=None, activations=None):
         """
@@ -57,7 +56,9 @@ class NeuronSmoothingConv:
 
         xs, ys = _get_grid_coord(tissue_x, tissue_y)
 
-        H, W = len(ys), len(xs)           
+        H, W = len(ys), len(xs)
+        # Expose the grid shape used for this projection (read by callers to reshape output).
+        self.height, self.width = H, W
         N_samples, N_neurons = activations.shape
         assert N_neurons == len(positions)
 
