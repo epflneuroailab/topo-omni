@@ -1,0 +1,13 @@
+{
+  "bold": {
+    "datatype": "func",
+    "task": "alignvideo"
+  },
+  "sbref": {
+    "datatype": "func",
+    "task": "alignvideo"
+  },
+  "fmap": {
+    "datatype": "fmap"
+  }
+}

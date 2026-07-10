@@ -1,0 +1,9 @@
+{
+  "_comment": "Vendored model island-Moran's-I point estimates for Fig. B3b (voice/vocals contrast). The brain bar is computed by analysis/05_island_morans_i.py; these two model bars come from Topo-Omni and are swapped for live topo-omni outputs at merge (docs/DESIGN.md §7/§10). See PROVENANCE.md.",
+  "contrast": "vocals",
+  "fwhm": 4.0,
+  "topo_omni_I": 0.5938924589442801,
+  "nontopo_I": 0.12599509990429125,
+  "topo_omni_n_islands": 29,
+  "nontopo_n_islands": 120
+}

@@ -1,0 +1,23 @@
+# Stage-1 (analysis) environment — Jung 2025 (Spacetop movie).
+#
+# Pinned to the stack the Jung golden masters were produced under (docs/DESIGN.md §6).
+# nilearn 0.12.1 (shared boundary with Marvi), numpy 2.2.5 (differs from Marvi).
+#
+# Source of truth: Jung had NO in-repo lockfile — it used the shared conda env at
+#   .../20251106_fMRI_movie_watching_neuromod_friends/fMRI_movie_watching_neuromod_friends_conda_env
+# (commit 4066746). Versions captured below; freezing them here IS the lock.
+# STATUS: scaffold — verify a clean solve and freeze the full transitive lock
+# during the Jung port (docs/DESIGN.md §9 step 4).
+name: omni-fmri-jung
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - numpy=2.2.5
+  - scipy=1.15.3
+  - pip
+  - pip:
+      - nilearn==0.12.1
+      # - -e ../core           # shared utilities (docs/DESIGN.md §3); enable once core is packaged
+      # TODO(port): pin nibabel, pandas, matplotlib, scikit-learn from the captured
+      #             shared env and freeze here.

@@ -1,0 +1,55 @@
+{
+  "method": "island_morans_i",
+  "dataset": "pernet_2015",
+  "contrast": "speech_vs_nonspeech",
+  "surface": "fsaverage6",
+  "n_subjects": 218,
+  "df": 217,
+  "fdr_q": 0.05,
+  "min_island_size": 8,
+  "n_permutations": 999,
+  "lh": {
+    "I": 0.5979208387777447,
+    "p_value": 0.006500000000000001,
+    "n_islands": 2,
+    "n_vertices": 2068,
+    "I_sig_only": 0.5979208387777447,
+    "n_sig_morans_i": 2,
+    "I_weighted_all": 0.9334619576961732,
+    "I_weighted_sig": 0.9334619576961732
+  },
+  "rh": {
+    "I": 0.46507761069004666,
+    "p_value": 0.08283333333333333,
+    "n_islands": 6,
+    "n_vertices": 2513,
+    "I_sig_only": 0.6638272970690567,
+    "n_sig_morans_i": 4,
+    "I_weighted_all": 0.907215255411952,
+    "I_weighted_sig": 0.9150641788787051
+  },
+  "all_island_I_values": [
+    0.9439212585372706,
+    0.2519204190182189,
+    0.9244183528580331,
+    0.9482666082476473,
+    0.5981018520572509,
+    0.16631456917411855,
+    0.18452237511329578,
+    -0.031158093310065665
+  ],
+  "brain_mean_I": 0.49828841771197113,
+  "brain_std_I": 0.4039598651383246,
+  "brain_se_I": 0.14282137998325625,
+  "n_islands_total": 8,
+  "stats": {
+    "topo_omni_I": 0.5938924589442801,
+    "nontopo_I": 0.12599509990429125,
+    "t_brain_vs_topo": -0.6693958652655307,
+    "p_brain_vs_topo": 0.7376502449361424,
+    "t_brain_vs_nontopo": 2.606705787686171,
+    "p_brain_vs_nontopo": 0.017540545743785933
+  },
+  "avg_I_unweighted": 0.5314992247338957,
+  "avg_I_weighted": 0.9203386065540626
+}
