@@ -150,6 +150,33 @@ from HuggingFace (`epfl-neuroai/topo-omni`) by default, so no checkpoint downloa
 
 ---
 
+## System requirements
+
+**Operating system.** Developed and tested on Ubuntu Linux 22.04 (x86_64).
+The code is standard cross-platform Python but has only been tested on Linux.
+
+**Python.** Python 3.10.
+
+**Software dependencies.** All Python dependencies, with pinned versions, are listed in
+[`requirements.txt`](requirements.txt) and installed with the command in [Setup](#setup). Key packages:
+`torch`, `transformers`, `trl`, `accelerate`, `deepspeed`, `qwen_omni_utils`, `omegaconf`, `wandb`,
+plus `numpy`, `scipy`, `scikit-learn` and `matplotlib`. The brain-side [`fMRI/`](fMRI/) subproject has
+its own separate Nilearn-based environment (see [`fMRI/README.md`](fMRI/README.md)).
+
+**Tested on.** Ubuntu Linux, Python 3.10, with the package versions pinned in `requirements.txt`.
+
+**Typical install time.** A few minutes on a normal desktop (~5–15 minutes), dominated by downloading the PyTorch / CUDA wheels.
+
+**Hardware.**
+- *Precomputed figure reproduction (default path):* **no GPU required** — runs on a standard CPU
+  desktop/laptop.
+- *Raw recompute / training:* one or more CUDA-capable NVIDIA GPUs.
+  The model was trained on 4× H200 --> Training uses multi-GPU via `accelerate` + `deepspeed`.
+
+No other non-standard hardware is required.
+
+---
+
 ## Reproducing the paper figures
 
 The model-side figure panels (Fig 2b/c, 3, 4, 5, 6, 7) reproduce via **two clearly separated
@@ -169,6 +196,15 @@ python make_all_figures.py --input-source precomputed --derivatives-root _precom
 ```
 
 Panels land in `figures_out/figure_<id>/`.
+
+> **This precomputed path also serves as the demo** required by the software checklist. It runs on a
+> small hosted cut of model outputs (downloaded from OSF), needs no GPU, no stimuli and no model download.
+> - **Demo dataset:** the precomputed cut fetched by `download_precomputed.py` from OSF
+>   (DOI [10.17605/OSF.IO/EHRT6](https://doi.org/10.17605/OSF.IO/EHRT6)).
+> - **Expected output:** rendered panels written to `figures_out/figure_<id>/`
+>   (e.g. `figures_out/figure_3/`).
+> - **Expected run time:** roughly ~5 minutes on a normal desktop for the full set
+>   (less for a subset such as `./reproduce_precomputed_figures.sh 3 4`).
 
 **2. Raw (opt-in)** — download the model from HuggingFace and recompute from stimuli (needs a GPU).
 Fully wired where inputs are public (the retinotopy/tonotopy stimulus banks self-generate); panels
