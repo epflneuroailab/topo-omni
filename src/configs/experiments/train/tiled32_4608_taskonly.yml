@@ -1,0 +1,203 @@
+# TASK-ONLY control for TILED-32 (topo-omni-tiled32-4608).
+#
+# Byte-for-byte the tiled32_4608.yml config below, with ONE change:
+# `apply-spatial-loss: false`. Everything else -- layout, adaptor width, position-dir,
+# batch-size 3 / grad-accum 5, 10 epochs, lr, audio-chunk, and both fine and coarse
+# neighborhood blocks -- is left exactly as the main run had it, so the only difference
+# between the two runs is whether the spatial term contributes gradient.
+#
+# WHY IT IS STILL A FULL COPY OF THE TOPO BLOCK. With apply-spatial-loss false,
+# train.py skips `model.load_positions()`, so `position-dir` and the whole
+# `neighborhood:` tree are never read. They are kept verbatim rather than deleted so a
+# diff against tiled32_4608.yml shows exactly one line of difference, and so this file
+# can be flipped back to a spatial run by changing that line alone.
+#
+# WHAT IS *NOT* CHANGED, DELIBERATELY:
+#   batch-size 3 / grad-accum 5 -- chosen in the main run for the ~4 GiB the two-term
+#     spatial loss costs on the H200s. Task-only has that memory spare, so a larger batch
+#     would fit, but the effective batch (3 x 5 x 4 GPUs = 60) has to match the run this
+#     is a control for. Do not "recover" the headroom here.
+#   save-total-limit  -- unset, i.e. the default of 1, exactly as in the main run. That
+#     DELETES the previous checkpoint on each save; snapshot a checkpoint elsewhere before
+#     evaluating it. Matching the main run matters more than convenience.
+#   sheet-layout: tiled32 -- still REQUIRED. train.sh exports it as TOPO_SHEET_LAYOUT
+#     before python starts, and it sets cortical_dim 4608 and suppresses the conv
+#     front-end slot. Without it the adaptors are built at a different width and the
+#     resulting checkpoint is not comparable to the main run at all -- this is not a
+#     spatial-loss-only switch.
+#
+# This is the Topo-Omni analogue of TDANN SW_0 and the "Task Only" bar in the smoothness
+# panels. The older topo-omni-task-only results are the 309x512 layout (158,208 units,
+# conv front-end ON the sheet) and cannot be used against a 460,800-unit tiled sheet.
+# TILED-32: no conv front-end slot, 4608-wide adaptor, 800x576 sheet.
+#
+# REQUIRES TOPO_SHEET_LAYOUT=tiled32. The layout is read from the environment in
+# spatial_utils; it also sets the adaptor width AND decides whether the encoder towers
+# build a front-end adaptor at all, so this config alone does not switch it.
+#
+# WHAT CHANGED against every earlier run, and why:
+#
+# 1. THE CONV FRONT-END IS OFF THE SHEET. `conv2` / `patch_embed` had a slot only so the
+#    audio and vision bands kept equal ROW counts while the unified sheet concatenated
+#    them along columns. Tiling each band independently drops that constraint. The slot
+#    was not free: the adaptor is a rank-constrained bottleneck sitting IN the residual
+#    stream, so it distorted the whole audio pathway before layer 0. 32 slots per encoder
+#    now, not 33.
+#
+# 2. GEOMETRY. n_col must satisfy BOTH n_col = 2*enc_across*enc_tile_cols AND
+#    n_col = thk_across*thk_tile_cols, with enc_down*enc_across = 32 and
+#    thk_down*thk_across = 36. At cortical_dim 4096 with 64-wide tiles that forces
+#    n_col = 512, where the only thk_across dividing 36 are 1/2/4 -> a 32x128 thinker tile
+#    and thinker "patches" that can only be stripes. 4608 gives 64x72 / 72x64 tiles,
+#    n_col = 576, and 576/64 = 9 divides 36. Both bands get 1.12-aspect tiles.
+#
+#      encoder  32 tiles of 64x72 in an 8x4 grid -> 512 x 288 per modality
+#      thinker  36 tiles of 72x64 in a 4x9 grid  -> 288 x 576
+#      sheet    800 x 576 = 460,800 units = 100 * 4608
+#
+#    NOTE this is ~10% MORE units than the 417,792 of continuous-4096, whose 4-clip video
+#    step already measured ~139/140 GiB on the H200s -- about 1 GiB of headroom. Measured
+#    deltas against that run:
+#        spatial loss   1.25 -> 3.94 GiB   (+2.69)
+#        adaptors       648M -> 717M params (+0.90 GiB of weights+optimizer)
+#        adaptor activations scale with the unit count, so ~+10% on top
+#    i.e. +5 to +7 GiB against ~1 GiB spare. Hence BATCH-SIZE 3, not 4, with grad-accum 5
+#    to compensate: 3 x 5 x 4 GPUs = 60 effective, against 4 x 4 x 4 = 64 before. Cutting
+#    activations ~25% buys far more than trimming the coarse term could, and the coarse
+#    term is the thing being tested. If it still OOMs, drop coarse
+#    `neighborhoods-per-batch` 600 -> 300 (~1.7 GiB) before touching anything else.
+#
+#    Counter-intuitive, and worth knowing before tuning: the OLD 8000-centre loss was
+#    cheap (1.25 GiB) because at r=5 a neighbourhood holds ~80 units, so `max_units: 768`
+#    never binds and the matrices are 80x80. Only the coarse term actually reaches its
+#    cap. Centre COUNT is therefore a time knob; `max_units` is the memory knob.
+#
+# 3. TWO-TERM SPATIAL LOSS. Measured on the existing face maps, the emergent map's
+#    wavelength is Lambda ~ 2.4 * r (zero crossing = 0.737r + 0.22, R^2 = 0.992 over
+#    r = 5..25), and the map has NO power beyond ~2r. The r=5 runs therefore produce
+#    ~12 px clusters and could never grow a face patch however long they trained -- a
+#    large patch is out-of-band, not slow to converge. So:
+#      fine   -- r = 5, UNSCOPED. Its cross-tile pairs are the only thing asking adjacent
+#                layers to resemble each other. Keeps Lambda ~ 12 px fine structure.
+#      coarse -- r = 4 -> 32 linear across the 32 encoder slots, UNSCOPED. At r = 32,
+#                Lambda ~ 77 px against a 64x72 tile, so a cluster is larger than one
+#                layer's tile and spans into its neighbours. That is intended: the sheet
+#                is UNIFIED, and a category patch should be free to cover several
+#                adjacent processing stages rather than stop at a layer boundary.
+#
+# 4. SERPENTINE TILE ORDER. Under row-major order layer 3 sits at the right edge of tile
+#    row 0 and layer 4 at the LEFT edge of row 1, so the depth sequence is torn at every
+#    row end and a cluster cannot grow across it -- the tile grid ends up visible in the
+#    map. Boustrophedon order (odd rows right-to-left) makes every consecutive pair of
+#    layers spatially adjacent, so spanning is continuous all the way down the band.
+#    Amplitude does not suffer from the larger radius: measured trough depth went -0.16
+#    (r=5) to -0.38 (r=23), so bigger neighborhoods give a STRONGER map, not a blurrier one.
+run-title: topo-omni-tiled32-4608-taskonly
+debug: false
+
+# Read by scripts/train.sh and exported as TOPO_SHEET_LAYOUT before python starts. The
+# layout is resolved at import time in spatial_utils, so it cannot be set from inside the
+# run. Nothing else in this config is valid under a different layout: the coords under
+# position-dir hold 460,800 units and every other geometry rejects them.
+sheet-layout: tiled32
+
+train:
+  n-epochs: 10
+  batch-size: 3
+  grad-accum: 5
+  learning-rate: 5.e-5
+  lr-scheduler: cosine
+  warmup-ratio: 0.03
+  weight-decay: 0.01
+  apply-spatial-loss: false
+
+topo-params:
+  alpha: 20
+  accum: mean
+  activation-decay: 0
+  position-dir: neighborhoods/model=qwen2-5omni-3b-tiled32-4608-v7_radius=dynamic_coords=42
+  audio-chunk: 5
+  cortical-init: 0.001
+  identity-init: true
+
+  neighborhood:
+    mode: dynamic
+
+    # --- FINE term: small radius, UNSCOPED (spills across tile borders on purpose) ---
+    # Constant, not a schedule: this term exists to keep fine structure and cross-layer
+    # continuity, and the depth-dependent part of the story is now the coarse term's job.
+    radius-min: 5
+    radius-max: 5
+    schedule: linear
+    neighborhoods-per-batch: 4000
+    coords-seed: 42
+
+    drop-dead-units: true
+    scale-balance: false
+    stratify-by-depth: true
+    # uniform: with a constant fine radius every band has the same neighbourhood size, so
+    # an inverse-radius weighting would be a no-op. Saying uniform is honest.
+    center-allocation: uniform
+    max-neighborhood-units: 768
+
+    # --- COARSE term: large radius, confined to each layer's own tile ---------------
+    coarse:
+      enabled: true
+      # 4 at encoder slot 0 -> Lambda ~ 10 px, ~7 cycles across a 64x72 tile.
+      # 32 at slot 31 and throughout the thinker -> Lambda ~ 77 px > the tile, i.e. one
+      # patch per layer. This is the "earlier slots show smaller clusters" gradient.
+      radius-min: 4
+      radius-max: 32
+      schedule: linear
+      # Far fewer centres than the fine term: each coarse neighbourhood is capped at 768
+      # units and so costs ~768^2 pairs, against ~80^2 for a radius-5 one. 600 centres
+      # over 100 tiles is ~6 per tile per forward.
+      neighborhoods-per-batch: 600
+      # The point-subsampling step, and the single most important memory knob here. A
+      # radius-32 neighbourhood holds ~2300 of the tile's 4608 units; a random 512 of them
+      # is an unbiased sample of its pairs, so this costs statistical power, not
+      # correctness. local_spatial_loss keeps a (K,K) distance AND a (K,K) correlation
+      # matrix in the autograd graph for EVERY neighbourhood at once, so peak memory goes
+      # as centres * K^2. Measured on the A100 (loss only, T=50, no model resident):
+      #
+      #    centres  max_units   peak GiB   time s
+      #        600        768       6.86     2.19
+      #        600        512       3.40     2.09   <- here: half the memory, same time
+      #        400        512       2.36     1.47
+      #        300        512       1.82     1.64
+      #        600        384       2.13     3.37   <- smaller K is SLOWER past ~512:
+      #       1000        384       3.35     4.94      the per-neighbourhood Python loop
+      #                                                dominates once K is small
+      # For reference the fine term above costs 0.78 GiB but ~10s, because 4000 tiny
+      # neighbourhoods are launch-bound rather than compute-bound.
+      max-neighborhood-units: 512
+      # Weight before alpha. Measured at checkpoint-146 (epoch 2) with weight 1.0:
+      #
+      #                       loss    shuffled-coord chance    improvement
+      #     fine   (r=5)     0.3989          0.5002              +0.101
+      #     coarse (4->32)   0.4650          0.4999              +0.035
+      #
+      # and the map autocorrelation was FLAT beyond lag 20, with tiles at coarse r~29
+      # indistinguishable from tiles at r~7 -- i.e. essentially all of that +0.035 was
+      # short-range structure the FINE term had already built, seen through a big window.
+      # The coarse term was building nothing of its own.
+      #
+      # WHY it was starved: `local_spatial_loss` returns one Pearson correlation per
+      # neighbourhood and `losses.mean()` weights each neighbourhood EQUALLY, whatever its
+      # pair count. A coarse neighbourhood holds 512^2/2 ~ 131k pairs against the fine
+      # term's 80^2/2 ~ 3.2k, so gradient-per-pair is ~41x smaller -- and there are 6.7x
+      # fewer of them. Weight 1.0 balanced the two terms' contribution to the LOSS VALUE,
+      # which is not the same as balancing their gradient at their own scale.
+      #
+      # 10 is a measured step toward the ~41 that would equalise per-pair gradient, not
+      # the full correction. CAUTION: this also multiplies the total spatial gradient by
+      # ~6x (alpha * (fine + 10*coarse) ~ 100 against ~17 before), which acts like a 6x
+      # learning-rate increase on the adaptors. If the task loss degrades or training
+      # destabilises, drop `alpha` from 20 to ~4 to restore the old overall scale while
+      # keeping this 10:1 ratio between the terms.
+      weight: 10.0
+      # Confine each neighbourhood to its centre's own layer tile. OFF: a cluster
+      # spanning adjacent layers is the whole point of a unified sheet, and hard scoping
+      # would etch every tile border into the map. Left here as the clean ablation for
+      # how much the cross-tile pairs actually contribute.
+      tile-scoped: false

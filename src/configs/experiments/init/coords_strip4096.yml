@@ -1,0 +1,10 @@
+# Coordinates for the STRIP-4096 layout (816x512, 4096-wide adaptor).
+# MUST be generated with TOPO_SHEET_LAYOUT=strip-4096; init_coords refuses a mismatch.
+# radius here only names the output directory -- training uses mode: dynamic, which
+# resolves neighbourhood radii from coords.npy and the run config, not from this file.
+model_name: qwen2-5omni-3b-strip-4096-v1
+p: 'inf'
+radius: 5
+neighborhoods_per_batch: 20
+n_col: 512
+n_row: 816

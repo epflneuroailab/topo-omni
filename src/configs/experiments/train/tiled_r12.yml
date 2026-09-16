@@ -1,0 +1,123 @@
+# Tiled sheet layout + radius-max 12.
+#
+# REQUIRES the job to run with TOPO_SHEET_LAYOUT=tiled -- the layout is read from the
+# environment in spatial_utils, so this config alone does not switch it. The 824x192
+# coords under position-dir will be rejected by a strip-layout run (and vice versa).
+# Front-end cortical slot + 1/r center allocation.
+#
+# Two changes relative to train_c1000.yml:
+#   1. The sheet is now 309x512: each encoder contributes its conv front-end
+#      (audio `conv2`, vision `patch_embed`) as sheet slot 0 ahead of its 32 blocks,
+#      giving the spatial loss the earliest spectrotemporal stage to organise. This is
+#      what the tonotopy analysis needs -- the conv front-end was previously frozen and
+#      off-sheet, so no tonotopic map could form there.
+#   2. center-allocation: inverse-radius (1/r) instead of inverse-size (1/r^2).
+run-title: topo-omni-tiled-r12
+
+debug: false
+
+train:
+  n-epochs: 10
+  batch-size: 4
+  grad-accum: 4
+  learning-rate: 5.e-5
+  lr-scheduler: cosine
+  warmup-ratio: 0.03
+  weight-decay: 0.01
+  apply-spatial-loss: true
+
+topo-params:
+  alpha: 20
+  accum: mean
+  activation-decay: 0
+  # 309x512 coordinates (158,208 units). The old ...unified-20-v3... directory holds
+  # 304x512 coords and is rejected at load time by the unit-count check in
+  # `_load_or_build_coordinates`.
+  position-dir: neighborhoods/model=qwen2-5omni-3b-tiled-r12-v5_radius=12_neighborhoods=20_coords=42
+  # Tokens pooled into ONE spatial-loss sample. The cortical states are pooled over this
+  # many tokens, and each pooled step becomes one row of `activations` -- i.e. one sample
+  # in the unit x unit `corrcoef` the loss is built on. At the original 50, a 4 s clip
+  # yields a SINGLE sample, so the 768x768 correlation matrix has rank 0 and the loss is
+  # regressing undefined correlations against distance. 5 gives 10x the samples; memory is
+  # linear in the resulting time-step count and negligible. Video/text chunks are derived
+  # from the audio step count, so this raises the sample count for every modality.
+  # 50 reproduces the original behaviour. NOTE the first tiled run (topo-omni-tiled-r12)
+  # predates this knob and ran with the default 50; its own config.yml is archived in its
+  # checkpoint directory.
+  audio-chunk: 5
+
+  cortical-init: 0.001
+  identity-init: true
+
+  neighborhood:
+    # dynamic: neighborhood radius grows with depth, resolved on the fly from
+    #          coords.npy alone (no precomputed table needed)
+    # fixed:   single radius for the whole sheet, read from the precomputed
+    #          neighborhood_indices.npy under position-dir
+    mode: dynamic
+    # radius at the first encoder slot -- now the conv front-end, not block 0
+    radius-min: 5
+    # radius at the last encoder slot, and constant across every thinker layer.
+    # 12, not 25, and this is the point of the tiled run. A layer tile is 40x32, so a
+    # radius-25 neighbourhood spills far outside it and the loss would still be dominated
+    # by cross-layer pairs -- the very thing tiling is meant to remove. Same-layer share
+    # of a neighbourhood: 85% at r=5, 78% at r=8, 68% at r=12 (strip was 45/29/20%).
+    radius-max: 12
+    # linear | geometric | area-linear
+    schedule: linear
+    # 1000 centers, as in train_c1000.yml. The early encoder slots sit at radius 5, so
+    # their neighborhoods hold ~100 units and each gives a very noisy correlation
+    # estimate; at 136 centers the L0-3 gradient direction was only cos=+0.02
+    # self-consistent across independent draws. At 1000 centers that rises to +0.52 and
+    # L16-31 also improves (+0.20 -> +0.37). Cost: >=3x the spatial-loss compute per
+    # step, and with every unit live (video input) all 1000 neighborhoods are actually
+    # evaluated rather than ~640.
+    #
+    # NOTE `depth_band_ids` keys bands on the depth ROW only, so vision and audio share
+    # band ids: 33 encoder slots + 36 thinker layers = 69 bands, up from 68. A ~1.5%
+    # dilution of the per-band budget, which is why per-band counts differ slightly
+    # from the c1000 run.
+    neighborhoods-per-batch: 1000
+    # only used when coords.npy is missing and coordinates are rebuilt
+    coords-seed: 42
+
+    # --- gradient balance across depth (see spatial_utils.spatial_loss_fn) ---
+    # Mask zero-variance units out of a neighborhood (and never pick one as a center)
+    # instead of discarding the whole neighborhood.
+    drop-dead-units: true
+    # Weight each neighborhood by its units' activation scale. OFF: under the dynamic
+    # 5->25 schedule the early layers already receive ~7x MORE gradient per unit than
+    # late ones, so this flag over-corrects. Only enable with mode: fixed.
+    scale-balance: false
+    # Give every encoder / thinker slot a guaranteed quota of neighborhood centers per
+    # step instead of sampling uniformly over units.
+    stratify-by-depth: true
+    # How the per-step center budget is split across depth bands.
+    #   uniform        -- equal share per band
+    #   inverse-size   -- share proportional to 1/radius^2, equalising unit-memberships
+    #                     per band. Across the 5->25 schedule that is a 25:1 tilt towards
+    #                     the shallow bands.
+    #   inverse-radius -- share proportional to 1/radius. Same direction, but only a 5:1
+    #                     tilt, so the deep large-radius bands keep a much larger share.
+    #
+    # Using inverse-radius here: at 1000 centers the 1/r^2 allocation was measured to
+    # over-correct, speeding up the early layers ~7.7x while dropping the DEEP layers to
+    # a fraction of their old drift rate, which risks the layers 16-31 topography that
+    # already worked. 1/r keeps the shallow-band oversampling that fixed early vision
+    # without starving the deep bands. Measured on this sheet at 1000 centers:
+    #
+    #                        1/r^2      1/r
+    #   encoder slots 0-7      496      270   (0.54x -- still heavily oversampled)
+    #   encoder slots 16-32    145      212
+    #   thinker layers         194      360
+    #   deep total             339      572   (1.69x)
+    center-allocation: inverse-radius
+    # Cap units per neighborhood. local_spatial_loss holds a (K, K) distance and a (K, K)
+    # correlation matrix per neighborhood in the autograd graph, so memory grows as K^2.
+    # NOTE this cap matters MORE under inverse-radius than under inverse-size: shifting
+    # budget towards the deep, radius-25 bands means more large neighborhoods per step.
+    # Measured: mean neighborhood size rises 658 -> 1018 units (400 -> 551 after the
+    # cap), so total (K,K) pair memory is ~1.55x the 1/r^2 run -- 245M -> 378M pairs.
+    # Uncapped it would be a further 4.2x. If this run OOMs, drop the cap to ~512 or
+    # cut neighborhoods-per-batch before touching center-allocation.
+    max-neighborhood-units: 768

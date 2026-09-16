@@ -1,0 +1,36 @@
+run-title: topo-omni-mem
+debug: false
+
+train:
+  n-epochs: 5
+  batch-size: 2
+  grad-accum: 8
+  learning-rate: 5.e-5
+  lr-scheduler: cosine
+  warmup-ratio: 0.03
+  weight-decay: 0.01
+  apply-spatial-loss: true
+
+topo-params:
+  alpha: 20
+  accum: mean
+  activation-decay: 0
+  position-dir: neighborhoods/model=qwen2-5omni-3b-unified-frontend-20-v4_radius=20_neighborhoods=20_coords=42
+  cortical-init: 0.001
+  identity-init: true
+
+  neighborhood:
+    # dynamic: neighborhood radius grows with depth, resolved on the fly from
+    #          coords.npy alone (no precomputed table needed)
+    # fixed:   single radius for the whole sheet, read from the precomputed
+    #          neighborhood_indices.npy under position-dir
+    mode: dynamic
+    # radius at the first vision / audio encoder layer
+    radius-min: 5
+    # radius at the last encoder layer, and constant across every thinker layer
+    radius-max: 25
+    # linear | geometric | area-linear
+    schedule: linear
+    neighborhoods-per-batch: 100
+    # only used when coords.npy is missing and coordinates are rebuilt
+    coords-seed: 42

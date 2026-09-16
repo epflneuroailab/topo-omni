@@ -1,0 +1,173 @@
+# STRIP layout with a 4096-wide cortical adaptor: 816x512 = 417,792 units.
+#
+# REQUIRES TOPO_SHEET_LAYOUT=strip-4096. The layout is read from the environment in
+# spatial_utils and also sets the adaptor width, so this config alone does not switch it.
+# The 417,792-unit coords under position-dir are rejected by any other layout, and the
+# CONTINUOUS coords (also 417,792) would load but describe a different band structure --
+# match the env var to the position-dir.
+#
+# WHY THIS RUN. continuous-4096 changed two things at once against the original 309x512
+# strip: the adaptor went 1280 -> 4096, AND the layout went strip -> 2-D tiles. It is now
+# measured at the untrained floor at both checkpoints
+#     ckpt-69  (20% of training)  near/far 1.0021
+#     ckpt-138 (40% of training)  near/far 1.0035     floor 0.995-1.00, best ever 1.046
+# so neither change has produced tangential structure yet. This run isolates the adaptor
+# width: same 4096 units per layer and same total unit count as continuous-4096, but each
+# layer laid out as a full-width strip instead of a tile.
+#
+# GEOMETRY IS FORCED, NOT CHOSEN. `_band_from_layers` in strip mode reshapes
+# [T, L*cortical_dim] straight into the band, so the band area must equal L*cortical_dim:
+#     encoder  33 * 4096 = 135,168 = 528 rows x 256   (n_col // 2)
+#     thinker  36 * 4096 = 147,456 = 288 rows x 512
+#     n_row = 528 + 288 = 816
+# giving 16 rows per encoder slot and 8 per thinker layer (5 and 4 on the original strip).
+#
+# NO mm CALIBRATION. A layer spans 16 x 256 px -- extent along columns, almost none
+# across -- so mm_per_px is None and every distance from this layout is in px. Do not
+# quote a millimetre figure from this run; that is what the continuous layout was for.
+run-title: topo-omni-strip-4096-images
+
+# Images alongside the videos. A video step's ~228 samples are ~5 time-chunks per second
+# of one clip and span only ~12 EFFECTIVE dimensions; 64 stills already span ~24. An
+# image also contributes exactly one sample, so on an image step the sample axis is the
+# STIMULUS axis -- the one the orientation eval reads.
+image-data-path:
+  - ../data/imagenet_images.json
+  - ../data/dtd_images.json
+image-side: 224
+
+debug: false
+
+train:
+  n-epochs: 5
+  batch-size: 4
+  grad-accum: 4
+  learning-rate: 5.e-5
+  lr-scheduler: cosine
+  warmup-ratio: 0.03
+  weight-decay: 0.01
+  apply-spatial-loss: true
+  # null = keep every checkpoint. The default of 1 DELETES the previous one on each
+  # save, which is how continuous-4096 lost checkpoint-69 -- by the time checkpoint-138
+  # existed the earlier one was gone, and an across-training comparison was only possible
+  # because it had already been evaluated. A checkpoint here is 28 GB with optimizer
+  # state and save_strategy is per-epoch (5 epochs), so keeping all costs ~140 GB
+  # against 40 TB free.
+  save-total-limit: null
+  # Checkpoint every 26 optimizer steps (~1 h at the observed 138 s/step) instead of
+  # once per epoch. 104 steps/epoch, so 26 divides it and every epoch boundary
+  # (104/208/312/416/520) is still checkpointed for the across-training comparison.
+  # 20 checkpoints x 28 GB = ~560 GB against 40 TB free.
+  # Without this a preemption before step 104 discards the entire run, which is exactly
+  # what happened on the first attempt.
+  save-steps: 26
+  # PER RANK, and exactly T on an image step (one sample per image). Measured peak on an
+  # 80 GiB A100: 16 -> 20.4 GiB, 64 -> 38.3, 128 -> 62.0, 224 -> OOM. Training is on
+  # H200s (140 GiB) where a 4-clip VIDEO step is the binding constraint at ~139 GiB, and
+  # an image step at 96 costs ~50 GiB, so images do not raise the peak.
+  image-batch-size: 96
+  # null = whatever the two pools give: 272 video + 144 image steps, a ratio of 0.35.
+  # Setting 0.5 would CAP the video side down to 144 and discard nearly half the clips.
+  image-step-ratio: null
+
+
+topo-params:
+  alpha: 20
+  accum: mean
+  activation-decay: 0
+  # 309x512 coordinates (158,208 units). The old ...unified-20-v3... directory holds
+  # 304x512 coords and is rejected at load time by the unit-count check in
+  # `_load_or_build_coordinates`.
+  position-dir: neighborhoods/model=qwen2-5omni-3b-strip-4096-v1_radius=5_neighborhoods=20_coords=42
+  # Tokens pooled into ONE spatial-loss sample. Each pooled step is one row of
+  # `activations`, i.e. one sample in the unit x unit `corrcoef` the loss is built on.
+  # Measured on real Koala-36M batches (20 s clips, 25 audio tokens/s, batch 4):
+  #   chunk 50 -> T ~21   (rank <= 20 of 768; pairwise r has SE ~1/sqrt(21) = 0.22)
+  #   chunk  5 -> T ~224  (rank <= 223;                        SE ~0.067, 3.3x tighter)
+  # Video/text chunks are derived from the audio step count, so every band gains samples.
+  # 50 reproduces the original behaviour.
+  audio-chunk: 5
+
+  cortical-init: 0.001
+  identity-init: true
+
+  neighborhood:
+    # dynamic: neighborhood radius grows with depth, resolved on the fly from
+    #          coords.npy alone (no precomputed table needed)
+    # fixed:   single radius for the whole sheet, read from the precomputed
+    #          neighborhood_indices.npy under position-dir
+    mode: dynamic
+    # CONSTANT radius: min == max, so every encoder slot and thinker layer gets 12.
+    # The 5->25 schedule applied the loss at a different spatial scale at each depth,
+    # which confounds every depth-resolved measurement (per-slot gate rate, OSI, clustering
+    # ratio) -- you cannot separate "organised differently here" from "loss applied at a
+    # different scale here". It also gave each depth its own intrinsic Lambda, which is why
+    # the measured Lambda was a blend (82.5 px along rows vs 51.2 along columns) and why the
+    # controls' Lambda wandered 10-26 px. One radius -> one Lambda.
+    # 12 also keeps a neighbourhood (25x25 = 625 units) under the 768 cap, so the cap never
+    # binds, and matches TDANN's single neighborhood_width per map.
+    radius-min: 5
+    # radius at the last encoder slot, and constant across every thinker layer
+    radius-max: 5
+    # linear | geometric | area-linear
+    schedule: linear
+    # 1000 centers, as in train_c1000.yml. The early encoder slots sit at radius 5, so
+    # their neighborhoods hold ~100 units and each gives a very noisy correlation
+    # estimate; at 136 centers the L0-3 gradient direction was only cos=+0.02
+    # self-consistent across independent draws. At 1000 centers that rises to +0.52 and
+    # L16-31 also improves (+0.20 -> +0.37). Cost: >=3x the spatial-loss compute per
+    # step, and with every unit live (video input) all 1000 neighborhoods are actually
+    # evaluated rather than ~640.
+    #
+    # NOTE `depth_band_ids` keys bands on the depth ROW only, so vision and audio share
+    # band ids: 33 encoder slots + 36 thinker layers = 69 bands, up from 68. A ~1.5%
+    # dilution of the per-band budget, which is why per-band counts differ slightly
+    # from the c1000 run.
+    neighborhoods-per-batch: 8000
+    # only used when coords.npy is missing and coordinates are rebuilt
+    coords-seed: 42
+
+    # --- gradient balance across depth (see spatial_utils.spatial_loss_fn) ---
+    # Mask zero-variance units out of a neighborhood (and never pick one as a center)
+    # instead of discarding the whole neighborhood.
+    drop-dead-units: true
+    # Weight each neighborhood by its units' activation scale. OFF: under the dynamic
+    # 5->25 schedule the early layers already receive ~7x MORE gradient per unit than
+    # late ones, so this flag over-corrects. Only enable with mode: fixed.
+    scale-balance: false
+    # Give every encoder / thinker slot a guaranteed quota of neighborhood centers per
+    # step instead of sampling uniformly over units.
+    stratify-by-depth: true
+    # How the per-step center budget is split across depth bands.
+    #   uniform        -- equal share per band
+    #   inverse-size   -- share proportional to 1/radius^2, equalising unit-memberships
+    #                     per band. Across the 5->25 schedule that is a 25:1 tilt towards
+    #                     the shallow bands.
+    #   inverse-radius -- share proportional to 1/radius. Same direction, but only a 5:1
+    #                     tilt, so the deep large-radius bands keep a much larger share.
+    #
+    # Using inverse-radius here: at 1000 centers the 1/r^2 allocation was measured to
+    # over-correct, speeding up the early layers ~7.7x while dropping the DEEP layers to
+    # a fraction of their old drift rate, which risks the layers 16-31 topography that
+    # already worked. 1/r keeps the shallow-band oversampling that fixed early vision
+    # without starving the deep bands. Measured on this sheet at 1000 centers:
+    #
+    #                        1/r^2      1/r
+    #   encoder slots 0-7      496      270   (0.54x -- still heavily oversampled)
+    #   encoder slots 16-32    145      212
+    #   thinker layers         194      360
+    #   deep total             339      572   (1.69x)
+    # uniform, not inverse-radius: with a constant radius every band has the same
+    # neighbourhood size, so the 1/r weighting is a no-op (centres per band go from a 4.6x
+    # spread under 5->25 to 1.1x). Saying uniform is honest rather than relying on a
+    # correction that now does nothing.
+    center-allocation: uniform
+    # Cap units per neighborhood. local_spatial_loss holds a (K, K) distance and a (K, K)
+    # correlation matrix per neighborhood in the autograd graph, so memory grows as K^2.
+    # NOTE this cap matters MORE under inverse-radius than under inverse-size: shifting
+    # budget towards the deep, radius-25 bands means more large neighborhoods per step.
+    # Measured: mean neighborhood size rises 658 -> 1018 units (400 -> 551 after the
+    # cap), so total (K,K) pair memory is ~1.55x the 1/r^2 run -- 245M -> 378M pairs.
+    # Uncapped it would be a further 4.2x. If this run OOMs, drop the cap to ~512 or
+    # cut neighborhoods-per-batch before touching center-allocation.
+    max-neighborhood-units: 768

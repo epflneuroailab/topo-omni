@@ -1,0 +1,51 @@
+# Tonotopy for the TILED-32 run (800x576, no conv front-end slot, cortical_dim 4608) at the
+# FINAL checkpoint (step 730 / epoch 10), with NO neuron smoothing -- the per-unit map.
+#
+# REQUIRES TOPO_SHEET_LAYOUT=tiled32 in the environment. `src/models/spatial_utils`
+# resolves the layout at IMPORT time, and `run.py` calls load_dotenv() only after its
+# imports, so the value in .env is read too late -- export it on the command line:
+#
+#   TOPO_SHEET_LAYOUT=tiled32 python -m src.experiments.tonotopy.run \
+#       --config src/configs/eval/tonotopy_tiled32.yml
+#
+# Getting it wrong is silent: the towers would build a front-end adaptor the checkpoint
+# has no weights for, and stats.coords_path below would not match the sheet.
+run:
+  run_title: tiled32-4608-ckpt730-nosmooth
+  category_name: tonotopy
+  output_root: ${oc.env:SAVE_DIR,results}
+  do_pretrained: false
+  overwrite: true
+
+model:
+  device: cuda
+  model: src/ckpts/topo-omni-tiled32-4608
+
+data:
+  mode: audio
+  # 30 log-spaced centre frequencies (100 Hz .. 7 kHz) x 16 nuisance-matched exemplars.
+  # The exemplars are the within-frequency replicates the per-unit ANOVA needs; regenerate
+  # with `python -m src.experiments.tonotopy.stimuli`.
+  stimuli_root: ${oc.env:STIMULI_DIR}/tone_bank
+  # One clip per forward: unified_sheet is (n_tokens, 800, 576) and the script averages over
+  # dim 0, so a batch would average across CLIPS as well as tokens.
+  batch_size: 1
+  lm_reduce: mean
+  vis_reduce: mean
+
+stats:
+  alpha: 0.05
+  topk_pct: 0
+  smooth: true
+  # NO SMOOTHING. fwhm_mm=0 -> sigma_pix=0, and gaussian_filter with sigma=0 is a no-op,
+  # so NeuronSmoothingConv still RASTERISES the units onto the (n_col, n_row) grid -- which
+  # the reshape+rot90 in the plots depends on -- but applies no kernel. Do not "skip the
+  # smoother" instead: that leaves the values in unit-index order and the reshape scrambles
+  # them. Note the per-unit ANOVA is only honest here: on a smoothed sheet neighbouring
+  # units are near-duplicates, which inflates F and makes nearly everything "tuned".
+  fwhm_mm: 0.0
+  resolution_mm: 1.0
+  # MUST be this layout's own coords: 460,800 units, positions shuffled within each layer
+  # tile, and the exact file training used. The strip default is 158,208 units and would be
+  # rejected by the unit-count check in run.py.
+  coords_path: src/neighborhoods/model=qwen2-5omni-3b-tiled32-4608-v7_radius=dynamic_coords=42/coords.npy

@@ -1,0 +1,78 @@
+# Orientation eval for the TILED-32 run (800x576, no front-end slot, cortical_dim 4608).
+# REQUIRES TOPO_SHEET_LAYOUT=tiled32 -- the layout is resolved at import time and fixes
+# the unit count; the 460,800-unit coords below are rejected by any other geometry.
+# Orientation-preference eval config. Paths resolve from the environment (.env) via ${oc.env:VAR}.
+# The grating bank is the TDANN UNBIASED set (sine_grating_images_20190507) on OSF
+# (https://osf.io/64qv3,
+# tdann_data/datasets/sine_grating_images_ori_bias). It is downloaded on first run into
+# `data.stimuli_root` when `data.download` is true, so nothing needs to be staged by hand.
+run:
+  run_title: tiled32-4608-step0-fwhm3
+  category_name: orientation_unbiased
+  output_root: ${oc.env:SAVE_DIR,results}
+  do_pretrained: false
+
+model:
+  device: cuda
+  model: src/ckpts/tiled32-4608-step0
+
+data:
+  mode: image
+  # sine_grating_images_20190507: ~uniform across orientations, the set TDANN publishes on
+  bank: unbiased
+  # stimuli_root left unset: derived from data.bank (see GRATING_BANKS)
+  download: true          # fetch the bank from OSF if missing (idempotent)
+  download_workers: 4    # the 510 small files are latency-bound, so fetch them in parallel
+  color: all              # all | bw | rg  -- which grating colour sets to include
+  # One image per forward pass: unified_sheet is (n_tokens, 309, 512), so batching would
+  # average across images as well as tokens. There is deliberately no batch_size knob.
+
+stats:
+  # Which statistic gates and shades the maps: reliability | eta2 | fdr.
+  # All three are computed and saved every run, so switching only re-renders the figures.
+  #   reliability -- split-half correlation of the tuning curve across the SF/phase/colour
+  #                  nuisance dimensions: does the orientation preference generalise?
+  #   eta2        -- fraction of the unit's response variance explained by orientation
+  #   fdr         -- FDR-corrected ANOVA p-value (see the module docstring for why this one
+  #                  needs an absurd alpha here: it is the smoothing and the deterministic
+  #                  model inflating p, not the multiple-comparisons correction, and no
+  #                  correction spans more than ~5 orders of magnitude)
+  criterion: reliability
+  criterion_threshold: null   # null -> per-criterion default (eta2: 0.10, reliability: 0.5,
+                              # fdr: stats.alpha below)
+  # How the two halves are formed for the reliability criterion: sf | phase | colour | random.
+  # Use a structured split, NOT random: random halves draw the same mixture of nuisance
+  # stimuli, so they only measure sampling noise -- a unit whose preferred orientation shifts
+  # 45 deg between low and high spatial frequency still scores r ~ 0.97. Splitting along sf
+  # instead asks whether the orientation preference survives a change in spatial frequency.
+  reliability_split: sf
+  reliability_reps: 10        # only used when reliability_split == random
+  reliability_seed: 0
+  alpha: 1e-50            # FDR-corrected threshold, used when criterion == fdr
+  baseline: min           # how the tuning curve is made non-negative for the vector average:
+                          #   min  -- subtract each unit's least-preferred response (default).
+                          #           A constant shift, so it cancels out of the vector sum
+                          #           (8 evenly spaced orientations) and leaves the preferred
+                          #           orientation exactly as the raw curve gives it.
+                          #   zero -- rectify at zero. A nonlinear clip; on this sheet, where
+                          #           activations are ~zero-centred, it moves the preferred
+                          #           orientation of some units by up to ~50 deg.
+  # SMOOTHED, fwhm_mm=1.0: a real Gaussian on the ACTIVATIONS, applied before any
+  # preference is computed. This is the companion of the fwhm=0.0 run
+  # (tiled32-4608-ckpt365-nosmooth), not a replacement -- the unsmoothed map is the
+  # honest one, and this exists to test whether a modest kernel reveals orientation
+  # structure that per-unit noise was hiding. Do NOT compare pinwheel counts across the
+  # two: smoothing manufactures local continuity, and a winding-number detector returns
+  # more pinwheels on ANY smoothed field, including noise. Only real-vs-shuffled within
+  # one fwhm is interpretable.
+  fwhm_mm: 3.0
+  resolution_mm: 1.0
+  coords_path: src/neighborhoods/model=qwen2-5omni-3b-tiled32-4608-v7_radius=dynamic_coords=42/coords.npy
+
+plot:
+  # Each unit's opacity encodes its FDR-corrected p-value: strongly tuned units draw solid,
+  # marginal ones fade into the grey background, and units above `stats.alpha` disappear.
+  # The ramp is linear in -log10(q), not in q -- corrected p-values here span ~160 orders of
+  # magnitude, so a linear ramp would render nearly every surviving unit fully opaque.
+  opacity_floor: 0.15          # opacity of a just-barely-significant unit (q -> alpha)
+  opacity_saturate_pct: 95     # percentile of -log10(q) in the vision band that reaches 1.0
