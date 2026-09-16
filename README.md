@@ -35,55 +35,79 @@ topo-omni/
 ├── reproduce_precomputed_figures.sh  # one-command precomputed reproduction
 ├── .env.example                 # environment template (copy to .env)
 ├── src/
+│   │                             # Shared library first, then one folder per experiment.
 │   ├── core/
 │   │   ├── model_loading.py      # load_topo_omni(): single HuggingFace/local model loader
 │   │   └── precomputed.py        # OSF cut fetch + sha256 verify
 │   ├── models/
 │   │   ├── qwen2_5_omni.py       # Modified Qwen2.5-Omni with cortical sheet output
 │   │   └── spatial_utils.py      # LayerPositions, spatial loss, neighborhood utilities
-│   ├── eval/
-│   │   ├── run/                  # Run evaluations against a trained model
-│   │   │   ├── run_selectivity.py
-│   │   │   ├── run_ablation.py
-│   │   │   ├── run_clusters_iou.py
-│   │   │   ├── run_tonotopy.py
-│   │   │   ├── run_retinotopy.py
-│   │   │   ├── run_retinotopy_angle.py
-│   │   │   └── run_retinotopy_ecc.py
-│   │   ├── extract/              # Extract model activations for external datasets
-│   │   │   ├── extract_nsd.py
-│   │   │   ├── extract_spacetop.py
-│   │   │   ├── extract_spacetop_rating.py
-│   │   │   └── extract_clusters.py
-│   │   └── analysis/             # Post-hoc analysis and comparisons
-│   │       ├── marvi_response_profiles.py
-│   │       ├── cognitive_response_profiles.py
-│   │       ├── ablation_similarity.py
-│   │       ├── contrast_spacetop.py
-│   │       ├── explore_cluster_iou.py
-│   │       ├── no_ablation_judge.py
-│   │       └── stimulation_perception.py
-│   ├── visualize/                # Plotting scripts: selectivity/ablation/cluster maps,
-│   │                             # retinotopy & tonotopy maps, brain-alignment plots/tables,
-│   │                             # response profiles, topo vs. non-topo comparisons, ...
-│   ├── utils/
-│   │   ├── island_morans_I.py    # Spatial autocorrelation (Moran's I) for patchy maps
+│   ├── utils/                    # Sheet-generic numerics, shared across experiments
 │   │   ├── smoothing.py          # Gaussian smoothing over the cortical sheet
-│   │   ├── spatial_stats.py
+│   │   ├── spatial_stats.py      # Selectivity / spatial-statistics helpers
 │   │   ├── connected_components.py
-│   │   ├── generate_frequencies.py # Pure-tone stimulus bank for tonotopy mapping
-│   │   └── generate_retinotopy.py  # Localized stimulus bank for retinotopy mapping
+│   │   └── island_morans_I.py    # Spatial autocorrelation (Moran's I) for patchy maps
+│   ├── training/                 # Everything needed to TRAIN a model (run from src/)
+│   │   ├── train.py              # Training entry point
+│   │   ├── distill.py            # Knowledge distillation entry point
+│   │   ├── init_coords.py        # Pre-compute cortical coords / neighborhood structures
+│   │   ├── data_utils.py         # Dataset loading and collation
+│   │   └── batching.py           # Modality-homogeneous batch sampler
 │   ├── configs/
-│   │   ├── train.yml             # Training hyperparameters
-│   │   ├── eval_marvi.yml        # Selectivity eval config
-│   │   ├── eval_retinotopy.yml   # Retinotopy mapping eval config
-│   │   ├── eval_tonotopy.yml     # Tonotopy mapping eval config
-│   │   ├── init_coords.yml       # Cortical coordinate initialization config
-│   │   └── accelerate_config.yml
-│   ├── train.py                  # Training entry point
-│   ├── distill.py                # Knowledge distillation entry point
-│   ├── data_utils.py             # Dataset loading and collation
-│   └── init_coords.py            # Pre-compute neighborhood structures
+│   │   ├── accelerate.yml        # Accelerate/DeepSpeed launcher config
+│   │   ├── init/                 # Cortical coordinate initialization (coords*.yml)
+│   │   ├── train/                # Training configs (base.yml, tiled32_4608.yml, ...)
+│   │   └── eval/                 # Eval configs (retinotopy.yml, tonotopy.yml, marvi.yml, ...)
+│   ├── experiments/              # ONE FOLDER PER EXPERIMENT — each holds the whole chain
+│   │   │                         # (extract → run → analyse → plot) for that phenomenon.
+│   │   ├── orientation/          # Orientation maps, pinwheels, column spacing (Lambda)
+│   │   │   ├── run.py            #   map orientation preference over the sheet
+│   │   │   ├── metrics.py        #   preferred orientation, OSI, pinwheel detection
+│   │   │   ├── reference.py      #   reference-map construction
+│   │   │   ├── measure_lambda.py #   column spacing per vision-encoder tile
+│   │   │   ├── pinwheel_null.py  #   pinwheel count vs shuffled null
+│   │   │   ├── pinwheel_scan.py  #   scan slot ranges for pinwheel excess
+│   │   │   ├── plot_panel.py     #   paper panel: smoothed orientation map
+│   │   │   ├── plot_tiled.py     #   per-slot maps for a tiled sheet
+│   │   │   ├── plot_density_bars.py
+│   │   │   ├── smoothness_panels.py, smoothness_window_scan.py
+│   │   │   ├── tangential_ratio.py, nn_delta.py, deep_band_continuous.py
+│   │   │   └── macaque_map.py, tdann_model.py   # macaque V1 + TDANN references
+│   │   ├── retinotopy/
+│   │   │   ├── stimuli.py        #   localized stimulus bank (self-generating)
+│   │   │   ├── run.py            #   retinotopic mapping
+│   │   │   └── run_angle.py, run_ecc.py         # polar angle / eccentricity
+│   │   ├── tonotopy/
+│   │   │   ├── stimuli.py        #   pure-tone stimulus bank
+│   │   │   ├── run.py            #   tonotopic mapping
+│   │   │   └── plot.py
+│   │   ├── selectivity/          # Category selectivity over the sheet
+│   │   │   ├── extract_features.py  # model responses to localizer stimuli
+│   │   │   ├── run.py            #   ON vs OFF t-contrast, FDR-corrected
+│   │   │   ├── plot.py           #   in-silico selectivity sheet
+│   │   │   └── topo_nontopo.py, topo_nontopo_clustering.py  # topo vs non-topo controls
+│   │   ├── response_profiles/    # Per-category response bars (model vs fMRI localizers)
+│   │   │   ├── cognitive.py, marvi.py           # compute profiles
+│   │   │   └── plot.py, plot_cognitive.py, plot_pernet.py
+│   │   ├── ablation/             # Causal tests: ablation + stimulation
+│   │   │   ├── run.py            #   ablate a sheet region, measure behaviour
+│   │   │   ├── plot.py, plot_barplot.py
+│   │   │   ├── similarity.py, no_ablation_judge.py
+│   │   │   └── stimulation_perception.py, driving_perception.py
+│   │   ├── spacetop_discovery/   # Model-guided discovery of novel networks (SpaceTop)
+│   │   │   ├── extract.py, extract_rating.py
+│   │   │   ├── contrast.py       #   cluster contrasts
+│   │   │   ├── run_clusters_iou.py, explore_cluster_iou.py   # IoU vs null
+│   │   │   ├── plot_selectivity.py, plot_corr.py
+│   │   │   └── correlate_t_values.py            # model vs fMRI t-maps
+│   │   └── brain_alignment/      # Encoding-model alignment to human fMRI
+│   │       ├── plot_barplot.py
+│   │       └── table.py, table_stats.py
+│   ├── tools/                    # Dev/preflight utilities (not part of the paper pipeline)
+│   ├── ckpts -> ../artifacts/ckpts              # symlinks; real dirs live in artifacts/
+│   ├── neighborhoods -> ../artifacts/neighborhoods
+│   └── wandb -> ../artifacts/wandb
+├── artifacts/                    # Gitignored run outputs: checkpoints, neighborhoods, wandb logs
 ├── scripts/                      # Shell launchers, batch sweeps, result-compilation utilities
 │   ├── train.sh
 │   ├── run_ablation.sh
@@ -119,6 +143,47 @@ topo-omni/
 ├── requirements.txt
 └── README.md
 ```
+
+
+### Where each figure's code lives
+
+Each paper figure is reproduced by one script in `scripts/figures/`, which shells out to the
+experiment folders under `src/experiments/`. To follow a figure back to its source, start here:
+
+| Figure | Reproduce with | Experiment folder(s) |
+|--------|----------------|----------------------|
+| 1a | `scripts/figures/figure_1a.py` | `experiments/selectivity/` — unified sheet, tiled32 run |
+| 2c | `scripts/figures/figure_2.py` | `experiments/spacetop_discovery/` (+ `topo-discover/`) |
+| 3 | `scripts/figures/figure_3.py` | `experiments/selectivity/`, `experiments/response_profiles/`, `experiments/retinotopy/` |
+| 4 | `scripts/figures/figure_4.py` | `experiments/tonotopy/`, `experiments/response_profiles/` |
+| 5 | `scripts/figures/figure_5.py` | `experiments/response_profiles/` |
+| 6 | `scripts/figures/figure_6.py` | `experiments/ablation/` |
+| 7 | `scripts/figures/figure_7.py` | `experiments/spacetop_discovery/` |
+
+Figure 1a is the only figure built on the `topo-omni-tiled32-4608` run (800x576 sheet); every
+other figure uses the default `topo-omni` strip model. Its selectivity stats are the one expensive
+input: 10 localizers x a model load each. Either run them sequentially
+
+```bash
+python scripts/run_selectivity.py --model_name topo-omni-tiled32-4608 --fwhm 3.0
+```
+
+or fan them out to one single-GPU runai job per localizer (A100 `default` pool):
+
+```bash
+./submit_topoomni_selectivity.sh            # all 10; add e.g. `faces,scenes` for a subset
+```
+
+Both write `results/topo-omni-tiled32-4608/<localizer>/<localizer>_fwhm3.0_selectivity_stats.pkl`,
+which is what `scripts/figures/figure_1a.py` reads.
+
+Supporting analyses that are not a single main-text figure live in
+`experiments/orientation/` (orientation maps, pinwheels, column spacing) and
+`experiments/brain_alignment/` (encoding-model alignment tables).
+
+Every experiment folder holds the **whole chain** for that phenomenon — feature extraction,
+the run/eval step, post-hoc analysis, and plotting — so nothing has to be traced across
+`run/`, `extract/`, `analysis/`, and `visualize/` directories any more.
 
 ---
 
@@ -221,25 +286,25 @@ Everything below documents the individual building blocks these two paths orches
 ## Usage
 
 Evaluation / figure commands are run from the **repo root** (module form, e.g.
-`python -m src.eval.run.…`). The **training** commands (steps 1–2) are run from inside `src/`.
+`python -m src.experiments.<topic>.<script>`). The **training** commands (steps 1–2) are run from inside `src/`.
 
 ### 1. Initialize cortical coordinates *(training only)*
 
 Pre-computes neighborhood structures for the spatial loss. Run once before training.
 
 ```bash
-cd src && python init_coords.py -c configs/init_coords.yml
+cd src && python training/init_coords.py --config configs/init/coords.yml
 ```
 
-This generates `.pkl` files under `src/neighborhoods/` keyed by model name, radius, and neighborhood count.
+This generates `.pkl` files under `src/neighborhoods/` (a symlink to `artifacts/neighborhoods/`) keyed by model name, radius, and neighborhood count.
 
 ### 2. Train *(training only)*
 
 ```bash
-cd src && bash ../scripts/train.sh configs/train.yml <num_gpus> accelerate_config.yml
+cd src && bash ../scripts/train.sh train/base.yml <num_gpus> accelerate.yml
 ```
 
-Key config options (`configs/train.yml`):
+Key config options (`configs/train/base.yml`):
 
 | Key | Default | Description |
 |-----|---------|-------------|
@@ -260,13 +325,13 @@ Training logs to Weights & Biases when `--wandb` is passed.
 Tests whether specific regions on the cortical sheet are selective for a category (faces, bodies, objects, scenes, speech, etc.) versus control stimuli.
 
 ```bash
-python -m src.eval.run.run_selectivity --config src/configs/eval_marvi.yml
+python -m src.experiments.selectivity.run --config src/configs/eval/marvi.yml
 ```
 
 The model is loaded from HuggingFace (`epfl-neuroai/topo-omni`) by default; set `$TOPO_OMNI_MODEL`
 or `model.model` in the config to use a local checkpoint instead.
 
-Key config options (`src/configs/eval_marvi.yml`):
+Key config options (`src/configs/eval/marvi.yml`):
 
 | Key | Description |
 |-----|-------------|
@@ -292,16 +357,16 @@ Extract model activations for NSD (images) or SpaceTop (videos) fMRI datasets, t
 
 ```bash
 # NSD
-python -m src.eval.extract.extract_nsd
+python -m src.experiments.selectivity.extract_features
 
 # SpaceTop
-python -m src.eval.extract.extract_spacetop --group-index 0
+python -m src.experiments.spacetop_discovery.extract --group-index 0
 ```
 
 Run correlation analysis:
 
 ```bash
-python -m src.eval.analysis.contrast_spacetop --cluster_id 32 --topk 1
+python -m src.experiments.spacetop_discovery.contrast --cluster_id 32 --topk 1
 ```
 
 ### 6. Response profiles
@@ -314,7 +379,7 @@ bash scripts/cognitive_response_profiles.sh [top_k_pct] [fwhm_mm]               
 bash scripts/pernet_response_profiles.sh [top_k_pct] [fwhm_mm] [anatomical_constraint]     # PerNet vocal/non-vocal folds
 ```
 
-These call into `eval/analysis/marvi_response_profiles.py` / `eval/analysis/cognitive_response_profiles.py` and plot via `visualize/plot_response_profiles.py`, `visualize/plot_cog_response_profiles.py`, and `visualize/plot_pernet_response_profiles.py`.
+These call into `experiments/response_profiles/marvi.py` / `experiments/response_profiles/cognitive.py` and plot via `experiments/response_profiles/plot.py`, `experiments/response_profiles/plot_cognitive.py`, and `experiments/response_profiles/plot_pernet.py`.
 
 ### 7. Retinotopy and tonotopy mapping
 
@@ -322,15 +387,102 @@ Map preferred visual-field position (eccentricity / polar angle) and preferred s
 
 ```bash
 # 1. generate the (public) stimulus banks into $STIMULI_DIR
-python -m src.utils.generate_retinotopy     # -> $STIMULI_DIR/retino_bank/{*.png, manifest.csv}
-python -m src.utils.generate_frequencies    # -> $STIMULI_DIR/tone_bank/{*.wav, manifest.csv}
+python -m src.experiments.retinotopy.stimuli     # -> $STIMULI_DIR/retino_bank/{*.png, manifest.csv}
+python -m src.experiments.tonotopy.stimuli    # -> $STIMULI_DIR/tone_bank/{*.wav, manifest.csv}
 
 # 2. run the model over them (produces the maps directly)
-python -m src.eval.run.run_retinotopy --config src/configs/eval_retinotopy.yml   # polar angle + eccentricity
-python -m src.eval.run.run_tonotopy   --config src/configs/eval_tonotopy.yml     # preferred frequency
+python -m src.experiments.retinotopy.run --config src/configs/eval/retinotopy.yml   # polar angle + eccentricity
+python -m src.experiments.tonotopy.run   --config src/configs/eval/tonotopy.yml     # preferred frequency
 ```
 
 (The single-axis variants `run_retinotopy_ecc` / `run_retinotopy_angle` expect `eccentricity/` and `angle/` sub-banks instead of the combined `retino_bank`.)
+
+The same masked-map treatment is available for **orientation preference**, using the TDANN orientation-bias sine-grating bank (510 full-field gratings: 8 orientations x 8 spatial frequencies x 5 phases x {bw, rg}). That bank is not self-generating, but it is public, so the script downloads it from OSF on first run — no manual staging:
+
+```bash
+python -m src.experiments.orientation.run --config src/configs/eval/orientation.yml
+```
+
+It writes a preferred-orientation map (cyclic colormap), an orientation-selectivity-index (OSI) map, a scatter over the whole sheet, and a histogram of preferred orientations against the bank's own orientation distribution. Each unit's opacity encodes how strongly it is tuned, so marginal units fade into the background instead of being shown or hidden by a flat pass/fail mask.
+
+`stats.criterion` selects what "tuned" means — all three are computed and saved every run, so switching only re-renders the figures:
+
+| criterion | statistic | default cutoff |
+|-----------|-----------|----------------|
+| `reliability` (default) | correlation between tuning curves from two halves of the stimuli, split *along* a nuisance dimension (`stats.reliability_split`: `sf`, `phase`, `colour`, `random`) | 0.5 |
+| `eta2` | fraction of the unit's response variance explained by orientation | 0.10 |
+| `fdr` | FDR-corrected ANOVA p-value | `stats.alpha` |
+
+**Prefer `reliability` or `eta2` over `fdr`.** A p-value needs an absurd threshold here (~1e-50) to be selective, and the multiple-comparisons correction is not the reason: measured on this sheet, the whole span from uncorrected *p* to Bonferroni is 5.2 orders of magnitude — necessarily log10 of the 155,648 tests — so no correction moves the threshold far, and even Bonferroni still leaves ~82% of the vision band significant at 0.05. What actually inflates *p* is (i) the model being deterministic, so the ANOVA's error term is nuisance variance rather than trial noise and "the orientation effect is exactly zero" is essentially never true, and (ii) running the test on the *smoothed* sheet, worth ~13 orders of magnitude at the median (49% → 99% of the band significant) because near-silent units inherit their neighbours' tuning. Corrections that model the smoothing-induced dependence (RFT, cluster permutation) make the threshold *more* lenient, not less. A tiny alpha is an effect-size filter in disguise, so use an effect size.
+
+To quantify the resulting map with the metrics TDANN reports for V1 (Margalit et al.,
+Fig. 2 / `notebooks/F02_V1_Details`):
+
+```bash
+python -m src.experiments.orientation.metrics
+```
+
+This reads the `orientation_stats.npz` the run above wrote — no GPU, no re-extraction — and
+reports **circular variance** (`CV = 1 - |R|`, identical to `1 - OSI`), **column spacing**
+`Λ` (from the peak of the radially averaged power spectrum of `exp(2iθ)`; TDANN hard-codes
+this per model, we estimate it), **pinwheel density** in pinwheels per `Λ²` (winding numbers
+over the smoothed map, then connected-component counting — dimensionless, so comparable to
+TDANN's ~2.1 and macaque V1's ~3.0), and **map smoothness** (`(max - first) / max` of the
+Δ-preferred-orientation-vs-distance curve).
+
+Two caveats it prints and you should not skip:
+
+* **Pinwheel density is strongly smoothing-dependent** — it varies by two orders of magnitude
+  as the smoothing window grows from 0.15Λ to 1.0Λ, because a window approaching Λ averages
+  away the 180° turn at a pinwheel. The script always prints the full sensitivity sweep;
+  never quote a density without stating the window. The default (`--smooth-window-frac 0.15`)
+  keeps ~16 px per Λ, and the script warns below 8 px per Λ.
+To compare the map against the reference data TDANN uses:
+
+```bash
+python -m src.experiments.orientation.reference
+```
+
+**The reference is macaque V1, not human.** TDANN's Fig. 2 compares against macaque
+optical-imaging maps (Nauhaus) and macaque single units (Ringach et al. 2002); human V1
+orientation columns have never been mapped at pinwheel resolution, so there is no human
+reference for these metrics. (The human fMRI data under [`fMRI/`](fMRI/) is category
+selectivity, not orientation, and cannot substitute.)
+
+Two reference curves are reconstructed rather than read off a figure:
+
+* **Circular variance** — `data/ringach_2002_db.mat` (shipped by TDANN) holds the real
+  per-neuron values, so the script runs an actual two-sample KS test.
+* **Δorientation vs. distance** — `experiments/orientation/macaque_map.py` reproduces TDANN's
+  `NauhausOrientationTissue`, which is *not* a data file: it colour-decodes the orientation
+  panel of Fig. 2 of Nauhaus et al. (2012, Nat Neurosci 15:1683) against that panel's own
+  legend, and scales pixels to mm with its scale bar. Our reconstruction yields macaque
+  smoothness **0.684** against TDANN's published ~0.65, which validates the port. The source
+  figure is copyrighted, so it is fetched on demand and gitignored; only the derived curve
+  (`data/macaque_delta_curve.npz`) is tracked.
+
+**Smoothness is not parameter-free.** It depends both on the smoothing fwhm used to build the
+map (0.730 at fwhm=4 vs 0.466 at fwhm=2 on this sheet — straddling macaque's 0.684) and on the
+distance binning, since `(max - curve[0]) / max` moves with the width of the first bin. The
+metrics script therefore uses TDANN's own binning (9 bins reaching 0.943·Λ), and only values
+computed at matched fwhm *and* matched bins should be compared.
+
+Pinwheel density and the remaining panel values are still TDANN's Fig. 2 compares against macaque
+optical-imaging maps (Nauhaus) and macaque single units (Ringach et al. 2002); human V1
+orientation columns have never been mapped at pinwheel resolution, so there is no human
+reference for these metrics. (The human fMRI data under [`fMRI/`](fMRI/) is category
+selectivity, not orientation, and cannot substitute.) Circular variance is a genuine
+quantitative comparison — `data/ringach_2002_db.mat` ships the real per-neuron values, so
+the script runs an actual two-sample KS test. Pinwheel density and smoothness references are
+**read off the published figure** and labelled approximate, because TDANN does not
+redistribute the macaque map data they come from.
+
+* **The vision band's row axis is depth**, not tangential cortex (32 layers × 5 rows), so `Λ`
+  and pinwheel density are not straightforwardly the V1 quantities. The script quantifies how
+  badly this bites: the map's anisotropy, and whether neighbouring rows are more alike within
+  a layer than across a layer boundary.
+
+For `reliability`, use a **structured** split rather than `random`: random halves draw the same mixture of nuisance stimuli and so only measure sampling noise — a unit whose preferred orientation shifts 45° between low and high spatial frequency still scores r ≈ 0.97. Splitting along `sf` instead asks whether the preference survives a change in spatial frequency, and on this sheet that drops median vision-band reliability from 0.87 to 0.58. Preference and OSI come from the circular (axial, mod-180°) vector average of each unit's tuning curve. Note the bank deliberately oversamples cardinal orientations (0°: 79 stimuli, 90°: 80, vs 45°: 47, 135°: 48); responses are averaged *within* each orientation before that vector average, which keeps the sampling bias out of the estimate (taking it over the raw stimuli instead shifts preferences by up to ~4°). The histogram overlay is what separates a genuine cardinal preference in the sheet from the bank's sampling bias.
 
 ### 8. Cluster IoU
 
@@ -346,13 +498,17 @@ bash scripts/run_iou.sh
 
 | Metric | Script | Description |
 |--------|--------|-------------|
-| Selectivity (t-test) | `eval/run/run_selectivity.py` | ON vs OFF contrast, FDR-corrected |
+| Selectivity (t-test) | `experiments/selectivity/run.py` | ON vs OFF contrast, FDR-corrected |
 | Moran's I | `utils/island_morans_I.py` | Spatial autocorrelation of the selectivity map |
-| Brain alignment (r) | `eval/analysis/contrast_spacetop.py` | Correlation with fMRI t-maps |
-| Ablation accuracy | `eval/analysis/ablation_similarity.py` | Cross-category response similarity under ablation |
-| Cluster IoU | `eval/run/run_clusters_iou.py` | Overlap of activation masks across groups |
-| Retinotopic tuning | `eval/run/run_retinotopy*.py` | Preferred eccentricity/polar-angle per unit, ANOVA-tested |
-| Tonotopic tuning | `eval/run/run_tonotopy.py` | Preferred sound frequency per unit, ANOVA-tested |
+| Brain alignment (r) | `experiments/spacetop_discovery/contrast.py` | Correlation with fMRI t-maps |
+| Ablation accuracy | `experiments/ablation/similarity.py` | Cross-category response similarity under ablation |
+| Cluster IoU | `experiments/spacetop_discovery/run_clusters_iou.py` | Overlap of activation masks across groups |
+| Retinotopic tuning | `experiments/retinotopy/run*.py` | Preferred eccentricity/polar-angle per unit, ANOVA-tested |
+| Tonotopic tuning | `experiments/tonotopy/run.py` | Preferred sound frequency per unit, ANOVA-tested |
+| Orientation tuning | `experiments/orientation/run.py` | Preferred orientation + OSI per unit (circular, mod-180°), ANOVA-tested |
+| Orientation map structure | `experiments/orientation/metrics.py` | Circular variance, column spacing, pinwheel density, map smoothness (TDANN Fig. 2 metrics) |
+| Orientation map vs. macaque | `experiments/orientation/reference.py` | KS of circular variance against Ringach 2002 macaque V1 (n=308) |
+| Macaque reference map | `experiments/orientation/macaque_map.py` | Reconstructs TDANN's macaque orientation map to overlay its Δorientation-vs-distance curve |
 
 ---
 
