@@ -14,21 +14,23 @@
 #   downloaded input cut  -> $CUT_DIR/   (bulky; .gitignore'd)
 #
 # Usage:
-#   ./reproduce_precomputed_figures.sh                 # all model-side figures
-#   ./reproduce_precomputed_figures.sh 3 4             # a subset
-#   CUT_DIR=/scratch/cut OUT_DIR=/scratch/figs ./reproduce_precomputed_figures.sh
-#   PYTHON=/path/to/python ./reproduce_precomputed_figures.sh
+#   ./scripts/reproduce_precomputed_figures.sh                 # all model-side figures
+#   ./scripts/reproduce_precomputed_figures.sh 3 4             # a subset
+#   CUT_DIR=/scratch/cut OUT_DIR=/scratch/figs ./scripts/reproduce_precomputed_figures.sh
+#   PYTHON=/path/to/python ./scripts/reproduce_precomputed_figures.sh
 #
 # The brain-side figures are separate — see fMRI/reproduce_precomputed_figures.sh.
 # =============================================================================
 set -euo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$HERE"
+# This script lives in scripts/ but drives the entry points at the repo root, so resolve
+# the root from its own location rather than trusting the caller cwd.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
 
 PYTHON="${PYTHON:-python3}"
-CUT_DIR="${CUT_DIR:-$HERE/_precomputed_cut}"
-OUT_DIR="${OUT_DIR:-$HERE/figures_out}"
+CUT_DIR="${CUT_DIR:-$REPO_ROOT/_precomputed_cut}"
+OUT_DIR="${OUT_DIR:-$REPO_ROOT/figures_out}"
 FIGURES=("$@")   # positional args = figure subset (default: all)
 
 export MPLBACKEND="${MPLBACKEND:-Agg}"
@@ -51,7 +53,7 @@ if missing:
 print("all render + download deps present")
 PY
 then
-    echo "   -> install them:  $PYTHON -m pip install -r $HERE/requirements.txt"
+    echo "   -> install them:  $PYTHON -m pip install -r $REPO_ROOT/requirements.txt"
     exit 1
 fi
 echo

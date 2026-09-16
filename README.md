@@ -32,7 +32,6 @@ The approach builds on [TDANN](https://github.com/neuroailab/TDANN) and [TopoLM]
 topo-omni/
 ├── make_all_figures.py          # orchestrator: reproduce all model-side figures (precomputed|raw)
 ├── download_precomputed.py      # fetch the precomputed cut from OSF (+ sha256 verify)
-├── reproduce_precomputed_figures.sh  # one-command precomputed reproduction
 ├── .env.example                 # environment template (copy to .env)
 ├── src/
 │   │                             # Shared library first, then one folder per experiment.
@@ -109,6 +108,7 @@ topo-omni/
 │   └── wandb -> ../artifacts/wandb
 ├── artifacts/                    # Gitignored run outputs: checkpoints, neighborhoods, wandb logs
 ├── scripts/                      # Shell launchers, batch sweeps, result-compilation utilities
+│   ├── reproduce_precomputed_figures.sh  # one-command precomputed reproduction
 │   ├── train.sh
 │   ├── run_ablation.sh
 │   ├── run_iou.sh
@@ -120,6 +120,9 @@ topo-omni/
 │   ├── compile_moran_I.py
 │   ├── run_selectivity.py        # Batch launcher for selectivity sweeps
 │   ├── submit_train.py
+│   ├── submit_topoomni_ablation.sh
+│   ├── submit_topoomni_spacetop_discovery.sh
+│   ├── submit_topoomni_stimulation.sh
 │   └── figures/                  # Scripts that reproduce individual paper figures
 ├── topo-discover/                # Unsupervised discovery of functionally selective clusters
 │   │                             # from video-driven model embeddings (extract → cluster → label)
@@ -252,8 +255,8 @@ for the rationale and a per-panel input-availability table.
 stimuli, no model download.
 
 ```bash
-./reproduce_precomputed_figures.sh            # download cut from OSF + render all figures
-./reproduce_precomputed_figures.sh 3 4        # a subset
+./scripts/reproduce_precomputed_figures.sh            # download cut from OSF + render all figures
+./scripts/reproduce_precomputed_figures.sh 3 4        # a subset
 
 # …or the two steps by hand:
 python download_precomputed.py --dest _precomputed_cut
@@ -269,7 +272,7 @@ Panels land in `figures_out/figure_<id>/`.
 > - **Expected output:** rendered panels written to `figures_out/figure_<id>/`
 >   (e.g. `figures_out/figure_3/`).
 > - **Expected run time:** roughly ~5 minutes on a normal desktop for the full set
->   (less for a subset such as `./reproduce_precomputed_figures.sh 3 4`).
+>   (less for a subset such as `./scripts/reproduce_precomputed_figures.sh 3 4`).
 
 **2. Raw (opt-in)** — download the model from HuggingFace and recompute from stimuli (needs a GPU).
 Fully wired where inputs are public (the retinotopy/tonotopy stimulus banks self-generate); panels
