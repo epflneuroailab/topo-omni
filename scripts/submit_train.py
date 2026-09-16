@@ -11,10 +11,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     num_gpus = torch.cuda.device_count()
-    
-    if num_gpus > 1:
-        command = f"bash scripts/train.sh {args.config} {num_gpus} accelerate_config.yml"
-    else:
-        command = f"python src.train.py -c {args.config} --wandb" if not args.debug else f"python src.train.py -c {args.config} --wandb --debug"
-        
+
+    command = f"bash scripts/train.sh {args.config} {num_gpus} accelerate.yml"
+    if args.debug:
+        command += " --debug"
+
     os.system(command)
