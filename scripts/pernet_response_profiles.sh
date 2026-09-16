@@ -8,7 +8,7 @@ model_name="topo-omni"
 # for localizer in pernet_fold_A pernet_fold_B; 
 # do
 #     echo "Evaluating response profiles for ${localizer} localizer"
-#     python -m src.eval.analysis.marvi_response_profiles \
+#     python -m src.experiments.response_profiles.marvi \
 #         --model_name ${model_name} \
 #         --localizer ${localizer} \
 #         --top_k_pct ${top_k_pct} \
@@ -16,7 +16,7 @@ model_name="topo-omni"
 #         --anatomical_constraint ${anatomical_constraint}
 # done
 
-python -m src.visualize.plot_pernet_response_profiles \
+python -m src.experiments.response_profiles.plot_pernet \
     --model_name ${model_name} \
     --localizer pernet \
     --top_k_pct ${top_k_pct} \

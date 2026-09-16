@@ -21,7 +21,7 @@ VISUAL_LOCALIZERS = ["faces", "scenes", "objects", "vwfa"]
 STEPS = [
     {
         "name": "unified in-silico selectivity sheet",
-        "module": "src.visualize.selectivity",
+        "module": "src.experiments.selectivity.plot",
         "args": ["--results-dir", "{SAVE_DIR}/{MODEL_TITLE}", "--top-k-pct", "10"],
         "out_dir_arg": "--out-dir",
         "stage": "plot",
@@ -32,7 +32,7 @@ STEPS = [
 for _loc in VISUAL_LOCALIZERS:
     STEPS.append({
         "name": f"response profile: {_loc}",
-        "module": "src.visualize.plot_response_profiles",
+        "module": "src.experiments.response_profiles.plot",
         "args": ["--model_name", "{MODEL_TITLE}", "--localizer", _loc,
                  "--top_k_pct", "1", "--fwhm_mm", "4.0", "--anatomical_constraint", "true"],
         "collect": ["{MODEL_TITLE}/response_profiles/" + f"{_loc}_response_profiles_top1.png"],
@@ -41,12 +41,12 @@ for _loc in VISUAL_LOCALIZERS:
 
 # e-f retinotopy (polar angle + eccentricity) — recompute-only. Needs the HF model over the
 # retinotopy stimulus bank, which self-generates (public) with:
-#   python -m src.utils.generate_retinotopy   # -> $STIMULI_DIR/retino_bank/{*.png, manifest.csv}
+#   python -m src.experiments.retinotopy.stimuli   # -> $STIMULI_DIR/retino_bank/{*.png, manifest.csv}
 STEPS += [
     {
         "name": "retinotopy (polar angle + eccentricity)",
-        "module": "src.eval.run.run_retinotopy",
-        "args": ["--config", "src/configs/eval_retinotopy.yml"],
+        "module": "src.experiments.retinotopy.run",
+        "args": ["--config", "src/configs/eval/retinotopy.yml"],
         "collect": ["{MODEL_TITLE}/retinotopy/*.png"],
         "stage": "compute",
     },

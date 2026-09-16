@@ -4,7 +4,7 @@ Each figure script declares a list of STEPS and calls :func:`run_figure`. A step
 
     {
       "name":    "unified selectivity map",     # human label
-      "module":  "src.visualize.selectivity",   # python -m <module>
+      "module":  "src.experiments.selectivity.plot",   # python -m <module>
       "args":    ["--top-k-pct", "10", ...],     # CLI args (may include OUT / SAVE_DIR placeholders)
       "stage":   "plot" | "compute",             # "compute" runs only in --input-source raw
       "out_dir_arg": "--out-dir",                # optional: flag that points the module at OUT_DIR

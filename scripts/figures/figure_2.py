@@ -30,14 +30,14 @@ STEPS = [
     },
     {
         "name": "model vs fMRI Moran's-I correlation",
-        "module": "src.visualize.spacetop_corr",
+        "module": "src.experiments.spacetop_discovery.plot_corr",
         "args": [],
         "collect": ["{MODEL_TITLE}/spacetop_clusters_figures/island_morans_I_results_rating_contrast_vs_ratingv0_significant_topk=1_audio=True_smooth=True_fwhm=8.png"],
         "stage": "plot",
     },
     {
         "name": f"representative cluster {REP_CLUSTER} selectivity map",
-        "module": "src.visualize.spacetop_selectivity",
+        "module": "src.experiments.spacetop_discovery.plot_selectivity",
         "args": ["--cluster_id", REP_CLUSTER, "--topk", "1",
                  "--results-dir", "{SAVE_DIR}/{MODEL_TITLE}/spacetop_clusters_figures"],
         "collect": ["{MODEL_TITLE}/spacetop_clusters_figures/" + REP_CLUSTER + "/*.png"],

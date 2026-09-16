@@ -22,7 +22,7 @@ STEPS = []
 for _name, _cid in NETWORKS.items():
     STEPS.append({
         "name": f"{_name} network selectivity map (cluster {_cid})",
-        "module": "src.visualize.spacetop_selectivity",
+        "module": "src.experiments.spacetop_discovery.plot_selectivity",
         "args": ["--cluster_id", str(int(_cid)), "--topk", "1",
                  "--results-dir", "{SAVE_DIR}/{MODEL_TITLE}/spacetop_clusters_figures"],
         "collect": ["{MODEL_TITLE}/spacetop_clusters_figures/" + _cid + "/*.png"],

@@ -18,14 +18,14 @@ from _common import run_figure  # noqa: E402
 STEPS = [
     {
         "name": "driving perception (stimulation)",
-        "module": "src.visualize.driving_perception",
+        "module": "src.experiments.ablation.driving_perception",
         "args": [],
         "collect": ["{MODEL_TITLE}/ablation/driving_perception_results.png"],
         "stage": "plot",
     },
     {
         "name": "suppression accuracy bars",
-        "module": "src.visualize.plot_ablation_barplot",
+        "module": "src.experiments.ablation.plot_barplot",
         "args": [],
         "collect": ["{MODEL_TITLE}/ablation/suppressing_face_identification_results.png",
                     "{MODEL_TITLE}/ablation/suppressing_face_region_results.png"],

@@ -20,7 +20,7 @@ COGNITIVE_LOCALIZERS = ["language_text", "multiple_demand_text", "theory_of_mind
 STEPS = [
     {
         "name": f"response profile: {loc}",
-        "module": "src.visualize.plot_cog_response_profiles",
+        "module": "src.experiments.response_profiles.plot_cognitive",
         "args": ["--localizer", loc, "--top_k_pct", "10"],
         "collect": ["{MODEL_TITLE}/response_profiles/" + f"{loc}_response_profiles_top10.png"],
         "stage": "plot",

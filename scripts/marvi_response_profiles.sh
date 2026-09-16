@@ -12,7 +12,7 @@ do
     # for odd_even in odd even; 
     # do
     #     echo "Evaluating response profiles for ${localizer} localizer, odd_even=${odd_even}..."
-    #     python -m src.eval.analysis.marvi_response_profiles \
+    #     python -m src.experiments.response_profiles.marvi \
     #         --model_name ${model_name} \
     #         --localizer ${localizer} \
     #         --odd_or_even ${odd_even} \
@@ -21,7 +21,7 @@ do
     #         --anatomical_constraint ${anatomical_constraint}
     # done
 
-    python -m src.visualize.plot_response_profiles \
+    python -m src.experiments.response_profiles.plot \
         --model_name ${model_name} \
         --localizer ${localizer} \
         --top_k_pct ${top_k_pct} \

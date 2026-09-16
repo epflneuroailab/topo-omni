@@ -65,8 +65,8 @@ precomputed path covers every panel below; the "raw" column says what a from-scr
 path by anyone with a GPU — no data download required:
 
 ```bash
-python -m src.utils.generate_retinotopy    # -> $STIMULI_DIR/retino_bank/{*.png, manifest.csv}
-python -m src.utils.generate_frequencies    # -> $STIMULI_DIR/tone_bank/{*.wav, manifest.csv}
+python -m src.experiments.retinotopy.stimuli    # -> $STIMULI_DIR/retino_bank/{*.png, manifest.csv}
+python -m src.experiments.tonotopy.stimuli    # -> $STIMULI_DIR/tone_bank/{*.wav, manifest.csv}
 ```
 
 For the panels whose stimuli can't be redistributed, point `$STIMULI_DIR` at your own copy laid

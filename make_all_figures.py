@@ -26,8 +26,8 @@ from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
 _FIG_DIR = _HERE / "scripts" / "figures"
-# Figures with a reproduction script. 2c/7 are the SpaceTop-discovery panels.
-FIGURES = ["2", "3", "4", "5", "6", "7"]
+# Figures with a reproduction script. 1a is the tiled32 unified sheet; 2c/7 are the SpaceTop-discovery panels.
+FIGURES = ["1a", "2", "3", "4", "5", "6", "7"]
 
 
 def build_parser() -> argparse.ArgumentParser:
