@@ -7,7 +7,7 @@ Panels:
 
 precomputed: the cortical-sheet selectivity maps for the animal / landscape clusters, from the
 per-cluster t-maps in the cut. The example-stimulus collages need the SpaceTop movie frames and
-are therefore raw-only (topo-discover/make_cluster_collages.py). See docs/DESIGN.md.
+are therefore raw-only (spacetop_discovery/make_cluster_collages.py). See docs/DESIGN.md.
 """
 import sys
 from pathlib import Path
@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import run_figure  # noqa: E402
 
-# Representative discovered clusters (topo-discover merge: animals={5,6,7}, nature={30,31,32}).
+# Representative discovered clusters (spacetop_discovery merge: animals={5,6,7}, nature={30,31,32}).
 NETWORKS = {"animal": "05", "landscape": "32"}
 
 STEPS = []
@@ -32,7 +32,7 @@ for _name, _cid in NETWORKS.items():
 # Example-stimulus collages need the SpaceTop movie frames (not redistributable) -> raw-only.
 STEPS.append({
     "name": "cluster example-stimulus collages",
-    "script": "topo-discover/make_cluster_collages.py",
+    "module": "src.experiments.spacetop_discovery.make_cluster_collages",
     "args": ["--clusters_json", "topo-discover/task-alignvideo/clustering_v2/merged_clusters_tvals_v3.json",
              "--output_dir", "{OUT_DIR}/collages",
              "--video_root", "topo-discover/spacetop_embeddings_v2"],

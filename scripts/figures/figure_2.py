@@ -7,7 +7,7 @@ Panels:
   - a representative discovered-cluster selectivity map on the cortical sheet
 
 precomputed: all regenerate from the cut (cluster selectivity scores, per-cluster t-maps, and
-the Moran's-I summary JSON). Running the discovery pipeline from scratch (topo-discover/) needs
+the Moran's-I summary JSON). Running the discovery pipeline from scratch (src/experiments/spacetop_discovery/) needs
 the SpaceTop movies and is raw-only — see docs/DESIGN.md.
 
 (Fig 2b — visual clusters + response profiles vs fMRI — is reproduced by figure_3.py.)
@@ -23,7 +23,7 @@ REP_CLUSTER = "32"  # a representative brain-like (nature/landscape) cluster
 STEPS = [
     {
         "name": "discovered-cluster selectivity scores",
-        "script": "topo-discover/plot_model_selectivity.py",
+        "module": "src.experiments.spacetop_discovery.plot_model_selectivity",
         "args": ["--scores-path", "{SAVE_DIR}/spacetop_discovery/cluster_selectivity_scores_v1.json"],
         "out_dir_arg": "--out-dir",
         "stage": "plot",

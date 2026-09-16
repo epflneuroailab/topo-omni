@@ -94,7 +94,7 @@ def run_figure(figure_id: str, steps: list, argv=None) -> int:
             step_args += [step["out_dir_arg"], str(out_dir)]
 
         # `module` -> `python -m pkg.mod`; `script` -> `python path/to/script.py`
-        # (topo-discover/ is hyphenated, so its scripts run by path, not as modules).
+        # (script= stays the fallback for anything outside an importable package).
         if step.get("module"):
             cmd = [sys.executable, "-m", step["module"], *step_args]
         else:
