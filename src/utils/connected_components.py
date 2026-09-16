@@ -78,6 +78,16 @@ def keep_only_id(labeled: np.ndarray, keep_id: int) -> np.ndarray:
     return (labeled == keep_id).astype(np.uint8)
 
 
+def keep_only_ids(labeled: np.ndarray, keep_ids) -> np.ndarray:
+    """Keep several islands at once, flattened to a single 0/1 mask.
+
+    The per-island label is deliberately dropped: callers draw one category in one colour,
+    so the kept islands must read as one selection rather than N differently-labelled ones.
+    """
+    keep = np.isin(labeled, np.asarray(list(keep_ids), dtype=labeled.dtype))
+    return keep.astype(np.uint8)
+
+
 def remove_ids(mask: np.ndarray, labeled: np.ndarray, ids_to_remove: list[int]) -> np.ndarray:
     """
     Removes selected islands, leaving everything else as-is.
