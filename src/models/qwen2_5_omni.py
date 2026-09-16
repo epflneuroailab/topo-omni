@@ -58,7 +58,18 @@ from transformers.models.qwen2_5_omni.configuration_qwen2_5_omni import (
     Qwen2_5OmniVisionEncoderConfig,
 )
 
-from src.models.spatial_utils import LayerPositions, spatial_loss_fn
+from src.models.spatial_utils import (
+    DEFAULT_SHEET_LAYOUT,
+    LayerPositions,
+    RadiusSchedule,
+    SheetLayout,
+    attach_tile_scoping,
+    tile_grid_pos,
+    build_sheet_coordinates,
+    build_unit_radii,
+    describe_radius_schedule,
+    spatial_loss_fn,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -111,36 +122,107 @@ class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_attention_backend = True
 
+def _band_from_layers(states, layout, band_rows, band_cols, tile, device):
+    """`[L, T, D]` layer states -> `[T, band_rows, band_cols]`.
+
+    strip mode is the original `permute(1,0,2).reshape(-1, rows, cols)`: layer `l` lands on
+    a full-width strip because its D values run contiguously across `D/cols` whole rows.
+
+    tiled mode places each layer into its own 2-D tile instead. The scatter is done with a
+    precomputed index so it stays a single vectorised write, and is cached on the layout
+    because it depends only on geometry.
+    """
+    L, T, D = states.shape
+    flat = states.permute(1, 0, 2).reshape(T, L * D)          # [T, L*D], layer-major
+    if layout.mode == "strip":
+        return flat.reshape(T, band_rows, band_cols)
+
+    # tile_order is part of the key: the same band dims under a different order are a
+    # DIFFERENT scatter, and reusing a cached one would silently transpose the band.
+    key = f"_band_idx_{band_rows}x{band_cols}_{layout.tile_order}"
+    idx = getattr(layout, key, None)
+    if idx is None:
+        th, tw, nr, nc = tile
+        serp = layout.tile_order == "serpentine"
+        idx = torch.empty(L * D, dtype=torch.long)
+        for l in range(L):
+            tr, tc = tile_grid_pos(l, nc, serp)
+            # a layer's D values fill its tile in row-major order
+            rows = torch.arange(tr * th, (tr + 1) * th).repeat_interleave(tw)
+            cols = torch.arange(tc * tw, (tc + 1) * tw).repeat(th)
+            idx[l * D:(l + 1) * D] = rows * band_cols + cols
+        setattr(layout, key, idx)
+    out = torch.zeros(T, band_rows * band_cols, dtype=flat.dtype, device=flat.device)
+    out[:, idx.to(flat.device)] = flat
+    return out.reshape(T, band_rows, band_cols)
+
+
+def _sheet_has_frontend_slot(num_blocks: int) -> bool:
+    """Whether the encoder towers put their conv front-end (`conv2` / `patch_embed`) on
+    the cortical sheet.
+
+    Read off the active LAYOUT rather than a config flag, so an adaptor can never be built
+    without a tile to put it in, nor a tile left unfilled. The 33-slot geometries (strip,
+    strip-4096, continuous, tiled) carry the front-end; `tiled32` has 32 slots and drops it.
+    """
+    return DEFAULT_SHEET_LAYOUT.num_encoder_layers == num_blocks + 1
+
+
 class CorticalAdaptor(nn.Module):
     def __init__(self, config: Qwen2_5OmniConfig):
         super().__init__()
         self.input_dim = config.hidden_size if hasattr(config, "hidden_size") else config.d_model
         self.cortical_dim = config.cortical_dim if hasattr(config, "cortical_dim") else self.input_dim
 
-        self.W = nn.Parameter(torch.randn(self.cortical_dim, self.input_dim))
+        # [input_dim, cortical_dim], matching how it is used: `Z = X @ self.W`. It was
+        # declared transposed, which happened to work only while the two dims were equal --
+        # so `cortical_dim != input_dim` was unreachable. For the square default the shape
+        # is unchanged, so existing checkpoints load exactly as before.
+        self.W = nn.Parameter(torch.randn(self.input_dim, self.cortical_dim))
         self.z_hook = nn.Identity()  # hook point for cortical states
-        # Register as a non-persistent buffer (won't be saved in state_dict)
+        # W_pinv is only ever a cache of pinv(W); any write to W invalidates it.
+        self._pinv_stale = True
+
         is_training = hasattr(config, "is_training") and config.is_training
         if not is_training:
-            self.register_buffer("W_pinv", torch.zeros(self.input_dim, self.cortical_dim), persistent=False)
-            self._recompute_pinv()
+            # Register as a non-persistent buffer (won't be saved in state_dict)
+            self.register_buffer("W_pinv", torch.zeros(self.cortical_dim, self.input_dim), persistent=False)
+
+            # Do NOT fill the cache here: `from_pretrained` builds the module under
+            # `init_empty_weights`, so `self.W` is still a meta tensor with no data, and
+            # `torch.autocast(device_type="meta")` raises "unsupported scalarType". The
+            # cache is filled on the first forward, once the checkpoint has been loaded.
 
             # Recompute W_pinv every time state_dict is loaded
             self.register_load_state_dict_post_hook(self._on_load)
 
     def _recompute_pinv(self):
-        self.W_pinv = torch.linalg.pinv(self.W.float()).to(self.W.dtype)
+        # W_pinv is a plain cache, never a differentiated path: no_grad keeps it from
+        # pinning an autograd graph when refreshed outside an inference context.
+        with torch.no_grad():
+            self.W_pinv = self._pinv()
+        self._pinv_stale = False
+
+    def _pinv(self):
+        # `torch.linalg.pinv` is on torch.autocast's reduced-precision list, so inside an
+        # autocast region it is dispatched in bf16 even when handed a float32 input. Its
+        # backward then mixes a bf16 grad with the float32 saved input and dies with
+        # "expected mat1 and mat2 to have the same dtype". Pin it to float32 explicitly.
+        with torch.autocast(device_type=self.W.device.type, enabled=False):
+            return torch.linalg.pinv(self.W.float()).to(self.W.dtype)
 
     @staticmethod
     def _on_load(module, incompatible_keys):
-        module._recompute_pinv()
+        module._pinv_stale = True
 
     def forward(self, X):
         Z = X @ self.W
         Z = self.z_hook(Z)  # hook for cortical states
         if self.training:
-            W_pinv = torch.linalg.pinv(self.W.float()).to(self.W.dtype)
+            W_pinv = self._pinv()
         else:
+            if self._pinv_stale:
+                self._recompute_pinv()
             W_pinv = self.W_pinv
 
         X_hat = Z @ W_pinv
@@ -149,11 +231,20 @@ class CorticalAdaptor(nn.Module):
     def initialize(self, epsilon: float = 1e-3, identity=False):
         with torch.no_grad():
             if identity:
-                W_init = torch.eye(self.cortical_dim, self.input_dim)
+                # Tile the identity across cortical_dim rather than zero-padding it. With
+                # padding, an overcomplete adaptor starts with only the first input_dim
+                # channels carrying signal and the rest at noise scale (~30x less variance),
+                # so most new units begin effectively dead and `drop_dead_units` discards
+                # them. Tiling makes every channel a live copy of an input dim, which the
+                # spatial loss then differentiates. Reconstruction is unaffected: W keeps
+                # full ROW rank, so W @ pinv(W) = I exactly and the base model is untouched.
+                reps = -(-self.cortical_dim // self.input_dim)          # ceil
+                W_init = torch.eye(self.input_dim).repeat(1, reps)[:, :self.cortical_dim]
             else:
-                W_init = torch.zeros(self.cortical_dim, self.input_dim)
+                W_init = torch.zeros(self.input_dim, self.cortical_dim)
             W_init += epsilon * torch.randn_like(self.W).to(W_init.device)
             self.W.copy_(W_init)
+        self._pinv_stale = True
 
 
 ############################
@@ -190,6 +281,12 @@ class Qwen2_5OmniThinkerCausalLMOutputWithPast(ModelOutput):
     attentions: Optional[tuple[torch.FloatTensor]] = None
     rope_deltas: Optional[torch.LongTensor] = None
     spatial_loss: Optional[torch.FloatTensor] = None
+    #: The two spatial-loss terms, reported separately so wandb shows whether each is
+    #: actually descending. `spatial_loss` is alpha * (fine + coarse_weight * coarse), so
+    #: without these a stalled coarse term is invisible -- the sum keeps falling on the
+    #: back of the fine term alone. Names must end in "_loss" for the trainer to log them.
+    fine_spatial_loss: Optional[torch.FloatTensor] = None
+    coarse_spatial_loss: Optional[torch.FloatTensor] = None
     multimodal_spatial_loss: Optional[torch.FloatTensor] = None
     audio_spatial_loss: Optional[torch.FloatTensor] = None
     visual_spatial_loss: Optional[torch.FloatTensor] = None
@@ -228,6 +325,23 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         self.audio_bos_eos_token = nn.Embedding(2, config.output_dim)
         self.layers = nn.ModuleList([Qwen2_5OmniAudioEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.cortical_adaptors = nn.ModuleList([CorticalAdaptor(config) for _ in range(config.encoder_layers)])
+        # Sheet slot 0: the conv front-end, the earliest audio stage with any
+        # spectrotemporal structure for the spatial loss to organize. Kept as its
+        # own attribute rather than prepended to `cortical_adaptors` so existing
+        # checkpoints' `cortical_adaptors.N.W` keys still map to the same layer;
+        # prepending would shift every index by one and load silently misaligned.
+        # The name must contain "cortical_adaptor" -- `train.py` selects trainable
+        # parameters by that substring.
+        #
+        # Present only when the layout allots it a slot. `tiled32` does not: the slot
+        # existed to keep the audio and vision bands row-aligned for a column-wise concat,
+        # and tiling each band independently removes that constraint -- while the adaptor
+        # is a rank-constrained bottleneck sitting IN the residual stream, so keeping it
+        # would go on distorting the whole audio pathway before layer 0 to buy an
+        # alignment nothing needs any more.
+        self.has_frontend_slot = _sheet_has_frontend_slot(config.encoder_layers)
+        if self.has_frontend_slot:
+            self.frontend_cortical_adaptor = CorticalAdaptor(config)
         self.ln_post = nn.LayerNorm(config.d_model)
         self.avg_pooler = nn.AvgPool1d(2, stride=2)
         self.proj = nn.Linear(config.d_model, config.output_dim)
@@ -245,6 +359,23 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
 
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
+
+    def _pool_cortical_states(self, cortical_states, aftercnn_lens):
+        """Reduce one adaptor's cortical states to a `[B, T, D]` sheet slot.
+
+        Splits the flat per-token states back into the batch, halves the time axis
+        with `avg_pooler`, and right-pads each item to the longest so the slots can
+        be stacked. Shared by the conv front-end slot and every transformer layer.
+        """
+        cortical_states_list = cortical_states.split(aftercnn_lens.tolist(), dim=0)
+        max_len = max([state.shape[0] for state in cortical_states_list]) // 2
+        final_cortical_states = []
+        for each_cortical_state in cortical_states_list:
+            each_cortical_state = self.avg_pooler(each_cortical_state.transpose(0, 1)).transpose_(0, 1)
+            zero_pad = torch.zeros((max_len - each_cortical_state.shape[0], each_cortical_state.shape[1])).to(each_cortical_state.device)
+            each_cortical_state = torch.cat([each_cortical_state, zero_pad], dim=0)
+            final_cortical_states.append(each_cortical_state)
+        return torch.stack(final_cortical_states, dim=0)
 
     def _prepare_attention_mask(self, inputs_tensor: torch.Tensor, cu_seqlens: torch.Tensor) -> torch.Tensor:
         # Flash Attention 2 doesn't need a 4D mask and relies on `cu_seqlens/max_seqlen`
@@ -297,6 +428,17 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         padded_embed = nn.functional.gelu(self.conv1(padded_feature)) * padded_mask
         padded_embed = nn.functional.gelu(self.conv2(padded_embed)).transpose(1, 2)
 
+        # Front-end cortical adaptor, applied *before* the positional embedding so
+        # the sheet slot carries the pure spectrotemporal code rather than the
+        # sinusoidal time index. Like every other adaptor it sits in the forward
+        # path, so the whole audio pathway now flows through this bottleneck.
+        # It acts independently per position, so applying it to the padded tensor
+        # and selecting afterwards is identical to selecting first.
+        frontend_cortical_states = None
+        if self.has_frontend_slot:
+            padded_embed, frontend_cortical_states = self.frontend_cortical_adaptor(padded_embed)
+            frontend_cortical_states = frontend_cortical_states[padded_mask_after_cnn]
+
         padded_embed = padded_embed + self.positional_embedding.positional_embedding[
             : padded_embed.shape[1], :
         ].unsqueeze(0).to(padded_embed.dtype)
@@ -309,9 +451,10 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         ).to(torch.int32)
         attention_mask = self._prepare_attention_mask(hidden_states, cu_seqlens)
 
-        audio_chunk = 50 # 1 second of audio
-
-        cortical_sheet = ()
+        # With a front-end slot: slot 0 is the conv front-end and slots 1..L the
+        # transformer layers. Without one: slots 0..L-1 are the transformer layers.
+        cortical_sheet = ((self._pool_cortical_states(frontend_cortical_states, aftercnn_lens),)
+                          if self.has_frontend_slot else ())
         for layer_idx, encoder_layer in enumerate(self.layers):
             layer_outputs = encoder_layer(
                 hidden_states,
@@ -324,15 +467,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
             # Cortical adaptor
             hidden_states, cortical_states = self.cortical_adaptors[layer_idx](hidden_states)
 
-            cortical_states_list = cortical_states.split(aftercnn_lens.tolist(), dim=0)
-            max_len = max([state.shape[0] for state in cortical_states_list]) // 2
-            final_cortical_states = []
-            for each_cortical_state in cortical_states_list:
-                each_cortical_state = self.avg_pooler(each_cortical_state.transpose(0, 1)).transpose_(0, 1)                
-                zero_pad = torch.zeros((max_len - each_cortical_state.shape[0], each_cortical_state.shape[1])).to(each_cortical_state.device)
-                each_cortical_state = torch.cat([each_cortical_state, zero_pad], dim=0)
-                final_cortical_states.append(each_cortical_state)
-            cortical_sheet += (torch.stack(final_cortical_states, dim=0),)
+            cortical_sheet += (self._pool_cortical_states(cortical_states, aftercnn_lens),)
 
 
         hidden_states_list = hidden_states.split(aftercnn_lens.tolist(), dim=0)
@@ -417,6 +552,15 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
         self.rotary_pos_emb = Qwen2_5_VisionRotaryEmbedding(head_dim // 2)
         self.blocks = nn.ModuleList([Qwen2_5OmniVisionBlock(config) for _ in range(config.depth)])
         self.cortical_adaptors = nn.ModuleList([CorticalAdaptor(config) for _ in range(config.depth)])
+        # Sheet slot 0: the patch-embedding front-end. The vision band never needed this
+        # slot for its own sake -- it existed only to keep the two encoder bands
+        # row-aligned while the unified sheet concatenated them along columns. Under a
+        # per-band tiling (`tiled32`) that constraint is gone and the slot is dropped. See
+        # the audio tower for why this is a separate attribute and why the name must
+        # contain "cortical_adaptor".
+        self.has_frontend_slot = _sheet_has_frontend_slot(config.depth)
+        if self.has_frontend_slot:
+            self.frontend_cortical_adaptor = CorticalAdaptor(config)
         self.merger = Qwen2_5OmniPatchMerger(
             dim=config.out_hidden_size,
             context_dim=config.hidden_size,
@@ -424,6 +568,25 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
         )
         self.gradient_checkpointing = False
     
+    def _pool_cortical_states(self, cortical_states, grid_thw):
+        """Reduce one adaptor's cortical states to a `[B, T, D]` sheet slot.
+
+        Splits the flat per-patch states back into the batch, pools each group of
+        `spatial_merge_unit` patches, and right-pads each item to the longest so the
+        slots can be stacked. Shared by the patch-embed front-end slot and every
+        transformer block.
+        """
+        cortical_states_list = cortical_states.split(tuple(grid_thw.prod(dim=1)), dim=0)
+        max_len = max([state.shape[0] for state in cortical_states_list]) // 4
+        final_cortical_states = []
+        for each_cortical_state in cortical_states_list:
+            each_cortical_state = each_cortical_state.reshape(-1, self.spatial_merge_unit, each_cortical_state.shape[1]).mean(dim=1)
+            if max_len > each_cortical_state.shape[0]:
+                zero_pad = torch.zeros((max_len - each_cortical_state.shape[0], each_cortical_state.shape[1])).to(each_cortical_state.device)
+                each_cortical_state = torch.cat([each_cortical_state, zero_pad], dim=0)
+            final_cortical_states.append(each_cortical_state)
+        return torch.stack(final_cortical_states, dim=0)
+
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
         for t, h, w in grid_thw:
@@ -534,8 +697,18 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
         )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
-        cortical_sheet = ()
         reverse_indices = torch.argsort(window_index)
+
+        # Front-end cortical adaptor. Applied here rather than straight after
+        # `patch_embed` because `hidden_states` has since been permuted into window
+        # order, which is the layout every block adaptor below sees -- tapping
+        # pre-permutation would put slot 0 in a different patch order from slots
+        # 1..L and scramble it relative to the rest of the band.
+        cortical_sheet = ()
+        if self.has_frontend_slot:
+            hidden_states, frontend_cortical_states = self.frontend_cortical_adaptor(hidden_states)
+            # Slot 0 is the patch-embed front-end; slots 1..L are the transformer blocks.
+            cortical_sheet = (self._pool_cortical_states(frontend_cortical_states, grid_thw),)
 
         # Modification here
         for layer_num, blk in enumerate(self.blocks):
@@ -554,18 +727,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
             # Cortical adaptor
             hidden_states, cortical_states = self.cortical_adaptors[layer_num](hidden_states)
 
-            cortical_states_list = cortical_states.split(tuple(grid_thw.prod(dim=1)), dim=0)
-            # reverse_indices_list = reverse_indices.split(tuple(grid_thw.prod(dim=1)//4), dim=0)
-            max_len = max([state.shape[0] for state in cortical_states_list]) // 4
-            final_cortical_states = []
-            for j, each_cortical_state in enumerate(cortical_states_list):
-                # each_cortical_state = self.merger(each_cortical_state)
-                each_cortical_state = each_cortical_state.reshape(-1, self.spatial_merge_unit, each_cortical_state.shape[1]).mean(dim=1)
-                if max_len > each_cortical_state.shape[0]:
-                    zero_pad = torch.zeros((max_len - each_cortical_state.shape[0], each_cortical_state.shape[1])).to(each_cortical_state.device)
-                    each_cortical_state = torch.cat([each_cortical_state, zero_pad], dim=0)                    
-                final_cortical_states.append(each_cortical_state)
-            cortical_sheet += (torch.stack(final_cortical_states, dim=0),)
+            cortical_sheet += (self._pool_cortical_states(cortical_states, grid_thw),)
 
             # cortical_sheet += (cortical_states.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1).mean(dim=1),)
 
@@ -771,29 +933,220 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         self.post_init()
 
     def load_positions(self):
-        if self.position_dir is None:
-            raise ValueError("position_dir is not set in the configuration.")
-        print(">> Loading positions from ", self.position_dir)
+        """
+        Build the cortical coordinates and, in dynamic mode, the per-unit
+        neighborhood radii used by the spatial loss.
 
-        neighbor_indices = np.load(f"{self.position_dir}/neighborhood_indices.npy")
-        neighborhoods_per_batch = 100
-    
-        coords_path = f"{self.position_dir}/coords.npy"
-        if os.path.exists(coords_path):
-            coordinates = np.load(coords_path)
+        In `dynamic` mode nothing is read from disk beyond `coords.npy`:
+        neighborhoods are resolved on the fly in `spatial_loss_fn`, with a radius
+        that grows with depth (small in the early vision / audio encoder layers,
+        `radius_max` by the last encoder layer and throughout the thinker).
+
+        In `fixed` mode (the default, and what every pre-existing config gets) the
+        precomputed single-radius neighborhood table is loaded as before.
+        """
+
+        neighborhood_cfg = getattr(self.config, "neighborhood", None) or {}
+        mode = neighborhood_cfg.get("mode", "fixed")
+        neighborhoods_per_batch = int(neighborhood_cfg.get("neighborhoods_per_batch", 100))
+
+        if mode not in ("dynamic", "fixed"):
+            raise ValueError(
+                f"unknown neighborhood mode '{mode}', expected 'dynamic' or 'fixed'"
+            )
+        if mode == "fixed" and self.position_dir is None:
+            raise ValueError("position_dir is not set in the configuration.")
+
+        # Must be the SAME object the forward pass reshapes with, or the coordinates
+        # would describe a different geometry from the sheet they index into.
+        layout = DEFAULT_SHEET_LAYOUT
+        # An encoder band holds either one slot per transformer block, or that plus one
+        # for the conv front-end (audio `conv2` / vision `patch_embed`). Anything else is
+        # a layout/config mismatch, and the towers read the same condition through
+        # `_sheet_has_frontend_slot`, so the two cannot drift apart.
+        n_blocks = self.config.vision_config.depth
+        if (layout.num_encoder_layers not in (n_blocks, n_blocks + 1)
+                or layout.num_thinker_layers != self.config.text_config.num_hidden_layers):
+            raise ValueError(
+                f"sheet layout has {layout.num_encoder_layers} encoder slots / "
+                f"{layout.num_thinker_layers} thinker layers but the config has "
+                f"{n_blocks} blocks (+1 iff the layout carries a front-end slot) / "
+                f"{self.config.text_config.num_hidden_layers}"
+            )
+        print(f">> Sheet layout '{layout.mode}': {layout.n_row}x{layout.n_col}"
+              f" | front-end slot: "
+              f"{'on' if layout.num_encoder_layers == n_blocks + 1 else 'off'}")
+
+        # the sheet geometry drives the reshapes in `forward`; fail loudly rather than
+        # silently mis-assigning depths if a config ever drifts from it. How many units a
+        # layer owns is rows*cols of its strip (strip mode) or of its tile (tiled mode).
+        if layout.mode == "strip":
+            enc_units = layout.rows_per_encoder_layer * (layout.n_col // 2)
+            thk_units = layout.rows_per_thinker_layer * layout.n_col
         else:
-            N_col = 512
-            N_row = 304
-            coordinates = np.array([(i,j) for i in range(N_row) for j in range(N_col)])
-        
-        self.positions = LayerPositions(
-            "unified_sheet",
-            torch.from_numpy(coordinates),
-            torch.from_numpy(neighbor_indices),
-            neighborhoods_per_batch,
+            enc_units = layout.enc_tile[0] * layout.enc_tile[1]
+            thk_units = layout.thk_tile[0] * layout.thk_tile[1]
+        # A layer occupies `cortical_dim` sheet units, which equals its hidden size only for
+        # a square adaptor. A widened adaptor buys sheet extent, so compare against the
+        # adaptor width actually configured.
+        want_enc = getattr(self.config.vision_config, "cortical_dim", None) \
+                   or self.config.vision_config.hidden_size
+        want_thk = getattr(self.config.text_config, "cortical_dim", None) \
+                   or self.config.text_config.hidden_size
+        if enc_units != want_enc:
+            raise ValueError(
+                f"sheet layout {layout.mode} gives {enc_units} units per encoder slot, "
+                f"but the vision adaptor is {want_enc} wide"
+            )
+        if thk_units != want_thk:
+            raise ValueError(
+                f"sheet layout {layout.mode} gives {thk_units} units per thinker layer, "
+                f"but the thinker adaptor is {want_thk} wide"
+            )
+
+        coordinates = self._load_or_build_coordinates(
+            layout, seed=int(neighborhood_cfg.get("coords_seed", 42))
         )
 
-        print(">> Positions loaded.")
+        unit_radii = None
+        neighbor_indices = None
+
+        if mode == "dynamic":
+            schedule = RadiusSchedule(
+                radius_min=float(neighborhood_cfg.get("radius_min", 5)),
+                radius_max=float(neighborhood_cfg.get("radius_max", 25)),
+                schedule=str(neighborhood_cfg.get("schedule", "linear")),
+            )
+            unit_radii = build_unit_radii(coordinates, layout, schedule)
+            print(">> " + describe_radius_schedule(layout, schedule))
+        else:
+            print(">> Loading neighborhoods from ", self.position_dir)
+            neighbor_indices = torch.from_numpy(
+                np.load(f"{self.position_dir}/neighborhood_indices.npy")
+            )
+
+        # Held for a whole accumulation group when > 1; see spatial_loss_fn.
+        center_reuse = int(neighborhood_cfg.get("center_reuse", 1) or 1)
+
+        self.positions = LayerPositions(
+            "unified_sheet",
+            coordinates,
+            neighbor_indices,
+            neighborhoods_per_batch,
+            unit_radii,
+        )
+
+        self.positions.center_reuse = center_reuse
+        if center_reuse > 1:
+            print(f">> Centre reuse: one draw held for {center_reuse} forward(s)")
+
+        # kept for depth-stratified center sampling in `spatial_loss_fn`
+        self.sheet_layout = layout
+
+        # Gradient-balance options. All default False so an existing config reproduces the
+        # original loss exactly; see `spatial_loss_fn` for what each one fixes.
+        self.spatial_drop_dead_units = bool(neighborhood_cfg.get("drop_dead_units", False))
+        self.spatial_scale_balance = bool(neighborhood_cfg.get("scale_balance", False))
+        self.spatial_stratify_by_depth = bool(neighborhood_cfg.get("stratify_by_depth", False))
+        self.spatial_center_allocation = str(neighborhood_cfg.get("center_allocation", "uniform"))
+        _mu = neighborhood_cfg.get("max_neighborhood_units", None)
+        self.spatial_max_units = None if _mu in (None, 0) else int(_mu)
+        print(f">> Spatial loss options: drop_dead_units={self.spatial_drop_dead_units}, "
+              f"scale_balance={self.spatial_scale_balance}, "
+              f"stratify_by_depth={self.spatial_stratify_by_depth}, "
+              f"center_allocation={self.spatial_center_allocation}, "
+              f"max_units={self.spatial_max_units}")
+
+        # --- optional coarse, tile-scoped term ---------------------------------------
+        # A second spatial-loss term with a much larger radius, every neighborhood confined
+        # to its center's own layer tile. This is what grows a large within-layer patch:
+        # the map's wavelength tracks the radius (~2.4x, measured), so the fine term above
+        # can only make Lambda ~ 12px clusters no matter how long it trains. Scoping it to
+        # a tile is what keeps the large radius meaningful -- unscoped, a tile-wide
+        # neighborhood spills into the layers tiled next to it and the loss ends up
+        # organizing the tile grid instead of the layer. The fine term stays UNSCOPED on
+        # purpose: its cross-tile pairs are the only thing asking adjacent layers to
+        # resemble each other.
+        coarse_cfg = neighborhood_cfg.get("coarse", None)
+        self.positions_coarse = None
+        self.spatial_coarse_weight = 0.0
+        self.spatial_coarse_max_units = None
+
+        if coarse_cfg:
+            if layout.mode != "tiled":
+                raise ValueError(
+                    f"the coarse tile-scoped term needs a tiled layout, got '{layout.mode}'"
+                )
+            coarse_schedule = RadiusSchedule(
+                radius_min=float(coarse_cfg.get("radius_min", 4)),
+                radius_max=float(coarse_cfg.get("radius_max", 32)),
+                schedule=str(coarse_cfg.get("schedule", "linear")),
+            )
+            coarse_positions = LayerPositions(
+                "unified_sheet_coarse",
+                coordinates,
+                None,
+                int(coarse_cfg.get("neighborhoods_per_batch", 500)),
+                build_unit_radii(coordinates, layout, coarse_schedule),
+            )
+            # OFF by default. Scoping was the obvious way to keep a tile-wide radius
+            # from bleeding into the layers tiled next door -- but bleeding across a tile
+            # border is exactly what a UNIFIED sheet is for: a cluster should be free to
+            # span adjacent layers rather than stop dead at a layer boundary, and hard
+            # scoping would etch the tile grid into every map. Serpentine tile order (see
+            # SheetLayout.tile_order) makes consecutive layers spatially adjacent so that
+            # spanning is continuous. Kept available as an ablation: turning it on is the
+            # clean test of how much the cross-tile pairs actually contribute.
+            if coarse_cfg.get("tile_scoped", False):
+                attach_tile_scoping(coarse_positions, layout)
+            coarse_positions.center_reuse = center_reuse
+
+            self.positions_coarse = coarse_positions
+            self.spatial_coarse_weight = float(coarse_cfg.get("weight", 1.0))
+            _cmu = coarse_cfg.get("max_neighborhood_units", 768)
+            self.spatial_coarse_max_units = None if _cmu in (None, 0) else int(_cmu)
+
+            print(">> Coarse spatial-loss term: "
+                  + describe_radius_schedule(layout, coarse_schedule))
+            print(f">> Coarse term: weight={self.spatial_coarse_weight}, "
+                  f"centers={coarse_positions.neighborhoods_per_batch}, "
+                  f"max_units={self.spatial_coarse_max_units}, "
+                  f"tile_scoped={coarse_positions.tile_scoped}, "
+                  f"tile_order={layout.tile_order}")
+
+        print(f">> Positions loaded ({neighborhoods_per_batch} neighborhoods per batch).")
+
+    def _load_or_build_coordinates(self, layout: SheetLayout, seed: int = 42) -> torch.Tensor:
+        coords_path = (
+            f"{self.position_dir}/coords.npy" if self.position_dir is not None else None
+        )
+
+        if coords_path is not None and os.path.exists(coords_path):
+            print(">> Loading coordinates from ", coords_path)
+            coordinates = torch.from_numpy(np.load(coords_path)).float()
+            # A coords.npy built for a different sheet geometry has the wrong number
+            # of units, but nothing downstream would notice: the spatial loss would
+            # just index a mismatched set and produce a scrambled map instead of an
+            # error. Cheap to check, so check.
+            # Unit COUNT alone is not enough: the strip (309x512) and tiled (824x192)
+            # layouts have exactly the same 158,208 units, so check the extent too or a
+            # strip coords.npy would load silently into a tiled run.
+            got = (int(coordinates.shape[0]),
+                   int(coordinates[:, 0].max()) + 1, int(coordinates[:, 1].max()) + 1)
+            want = (layout.num_units, layout.n_row, layout.n_col)
+            if got != want:
+                raise ValueError(
+                    f"{coords_path} holds {got[0]} units spanning {got[1]}x{got[2]}, but "
+                    f"the '{layout.mode}' sheet layout is {want[1]}x{want[2]} "
+                    f"({want[0]} units). Regenerate coordinates with "
+                    f"`TOPO_SHEET_LAYOUT={os.environ.get('TOPO_SHEET_LAYOUT', 'strip')} "
+                    f"python -m src.training.init_coords` after pointing `position-dir` at a "
+                    f"fresh directory."
+                )
+            return coordinates
+
+        print(f">> No coords.npy found, rebuilding sheet coordinates from seed {seed}.")
+        return build_sheet_coordinates(layout, seed=seed)
 
     def init_cortical_layers(self, epsilon: float = 1e-3, identity=False):
         for module in self.model.modules():
@@ -808,6 +1161,19 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             if isinstance(module, CorticalAdaptor):
                 module.initialize(epsilon=epsilon, identity=identity)
 
+        self.refresh_cortical_pinv()
+
+    def refresh_cortical_pinv(self):
+        """Materialize every adaptor's cached ``pinv(W)`` up front.
+
+        Adaptors fill this cache lazily on their first forward (it cannot be built at
+        construction time, when `from_pretrained` still has W on the meta device). Calling
+        this once after loading keeps the cost out of the first forward, and fills the
+        towers a given input never reaches.
+        """
+        for module in self.modules():
+            if isinstance(module, CorticalAdaptor) and module._pinv_stale and "W_pinv" in module._buffers:
+                module._recompute_pinv()
 
     def get_input_embeddings(self):
         return self.model.get_input_embeddings()
@@ -1130,6 +1496,8 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         loss = None
         task_loss = None
         spatial_loss = None
+        fine_spatial_loss = None
+        coarse_spatial_loss = None
         
         unified_sheet = None
 
@@ -1139,7 +1507,19 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             audio_time_steps_all = []
             audio_cortical_sheets_final = []
             if audio_cortical_sheet is not None:
-                audio_chunk = 50 # 2 second audio chunk
+                # Tokens per spatial-loss SAMPLE. The cortical states are pooled over
+                # `audio_chunk` tokens, and each pooled step becomes one row of
+                # `activations` -- i.e. one sample in the unit x unit `corrcoef` the
+                # spatial loss is built on. So this directly sets how many samples that
+                # correlation is estimated from: smaller chunk -> more samples -> less
+                # noisy r, at the cost of more memory for the sheet.
+                #
+                # The video and text chunks are DERIVED from the resulting audio step
+                # count (see `video_chunk` below), so lowering this raises the sample
+                # count for every modality, keeping the three bands time-aligned.
+                #
+                # 50 reproduces the original behaviour exactly.
+                audio_chunk = int(getattr(self.config, "spatial_time_chunk", 50))
                 audio_cortical_sheet = audio_cortical_sheet.permute(1,0,2,3)
                 for cortical_sheet in audio_cortical_sheet:
                     num_layers, _, hidden_dim = cortical_sheet.shape
@@ -1221,10 +1601,19 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 multimodal_cortical_sheet = torch.cat(multimodal_cortical_sheets_final, dim=1)
                 multimodal_time = multimodal_cortical_sheet.shape[1] #if multimodal_cortical_sheet is not None else 0
 
-                visual_cortical_sheet = visual_cortical_sheet.permute(1,0,2).reshape(-1, 160, 256) if visual_cortical_sheet is not None else torch.zeros((multimodal_time, 160, 256), device=inputs_embeds.device)
-                
-                audio_cortical_sheet = audio_cortical_sheet.permute(1,0,2).reshape(-1, 160, 256) if audio_cortical_sheet is not None else torch.zeros((multimodal_time, 160, 256), device=inputs_embeds.device)
-                #^ [L, T, D] -> [T, D, L] -> [T, D/n, n*L] where n=5, L=32, D=1280
+                _LO = DEFAULT_SHEET_LAYOUT
+                _ER, _EC = _LO.encoder_rows, _LO.n_col // 2
+                _mk = lambda st: (_band_from_layers(st, _LO, _ER, _EC, _LO.enc_tile,
+                                                    inputs_embeds.device)
+                                  if st is not None else
+                                  torch.zeros((multimodal_time, _ER, _EC),
+                                              device=inputs_embeds.device))
+                visual_cortical_sheet = _mk(visual_cortical_sheet)
+                audio_cortical_sheet = _mk(audio_cortical_sheet)
+                #^ [L, T, D] -> [T, encoder_rows, n_col/2]. L = 32 transformer blocks,
+                #  plus a leading conv/patch front-end slot on the layouts that carry one
+                #  (L=33). strip: each layer a full-width strip; tiled: each layer a 2-D
+                #  tile (see _band_from_layers).
 
                 min_len = min(visual_cortical_sheet.shape[0], audio_cortical_sheet.shape[0])
                 visual_cortical_sheet = visual_cortical_sheet[:min_len]
@@ -1233,15 +1622,17 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 unified_sheet = torch.cat([visual_cortical_sheet, audio_cortical_sheet], dim=-1)
                 #^ [T, 2D/n, n*L]
 
-                multimodal_cortical_sheet = multimodal_cortical_sheet.permute(1,0,2).reshape(-1, 144, 512)
-                #^ [L, T, D] -> [T, D, L] -> [T, D/n, n*L] where n=4, L=36, D=2048
+                multimodal_cortical_sheet = _band_from_layers(
+                    multimodal_cortical_sheet, _LO, _LO.thinker_rows, _LO.n_col,
+                    _LO.thk_tile, inputs_embeds.device)
+                #^ [L, T, D] -> [T, thinker_rows, n_col], L=36, D=2048
 
                 min_len = min(unified_sheet.shape[0], multimodal_cortical_sheet.shape[0])
                 unified_sheet = unified_sheet[:min_len]
                 multimodal_cortical_sheet = multimodal_cortical_sheet[:min_len]
 
                 unified_sheet = torch.cat([unified_sheet, multimodal_cortical_sheet], dim=1)
-                #^ [T, 304, 512]
+                #^ [T, n_row, n_col] -- 309x512 (strip) or 824x192 (tiled)
 
                 num_time_steps = unified_sheet.shape[0]
 
@@ -1252,7 +1643,39 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
 
             if unified_sheet is not None and self.apply_spatial_loss:
                 activations = unified_sheet.reshape(num_time_steps, -1)
-                unified_spatial_loss = spatial_loss_fn(activations=activations, positions=self.positions, accum=self.config.accum)
+                self.last_spatial_stats = {}
+                fine_spatial_loss = spatial_loss_fn(
+                    activations=activations,
+                    positions=self.positions,
+                    accum=self.config.accum,
+                    drop_dead_units=getattr(self, "spatial_drop_dead_units", False),
+                    scale_balance=getattr(self, "spatial_scale_balance", False),
+                    stratify_by_depth=getattr(self, "spatial_stratify_by_depth", False),
+                    center_allocation=getattr(self, "spatial_center_allocation", "uniform"),
+                    max_units=getattr(self, "spatial_max_units", None),
+                    layout=getattr(self, "sheet_layout", None),
+                    stats=self.last_spatial_stats,
+                )
+                unified_spatial_loss = fine_spatial_loss
+                if getattr(self, "positions_coarse", None) is not None:
+                    self.last_spatial_stats_coarse = {}
+                    coarse_spatial_loss = spatial_loss_fn(
+                        activations=activations,
+                        positions=self.positions_coarse,
+                        accum=self.config.accum,
+                        drop_dead_units=getattr(self, "spatial_drop_dead_units", False),
+                        scale_balance=getattr(self, "spatial_scale_balance", False),
+                        stratify_by_depth=getattr(self, "spatial_stratify_by_depth", False),
+                        center_allocation=getattr(self, "spatial_center_allocation", "uniform"),
+                        max_units=getattr(self, "spatial_coarse_max_units", None),
+                        layout=getattr(self, "sheet_layout", None),
+                        stats=self.last_spatial_stats_coarse,
+                    )
+                    unified_spatial_loss = (
+                        fine_spatial_loss
+                        + self.spatial_coarse_weight * coarse_spatial_loss
+                    )
+
                 spatial_loss = self.alpha * unified_spatial_loss
             else:
                 print(">> Warning: unified_sheet is None, spatial loss set to 0.")
@@ -1273,6 +1696,8 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
             spatial_loss=spatial_loss.item() if spatial_loss is not None and not isinstance(spatial_loss, float) else spatial_loss,
+            fine_spatial_loss=fine_spatial_loss.item() if fine_spatial_loss is not None and not isinstance(fine_spatial_loss, float) else fine_spatial_loss,
+            coarse_spatial_loss=coarse_spatial_loss.item() if coarse_spatial_loss is not None and not isinstance(coarse_spatial_loss, float) else coarse_spatial_loss,
             multimodal_cortical_sheet=multimodal_cortical_sheet.detach().cpu() if multimodal_cortical_sheet is not None else None,
             visual_cortical_sheet=visual_cortical_sheet.detach().cpu() if visual_cortical_sheet is not None else None,
             audio_cortical_sheet=audio_cortical_sheet.detach().cpu() if audio_cortical_sheet is not None else None,

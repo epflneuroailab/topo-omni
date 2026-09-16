@@ -6,6 +6,8 @@ from typing import Tuple
 
 import numpy as np
 
+from src.models.spatial_utils import DEFAULT_SHEET_LAYOUT as SHEET
+
 from tqdm import tqdm
 from scipy.ndimage import gaussian_filter
 
@@ -32,7 +34,7 @@ class NeuronSmoothingConv:
         # Grid shape (rows x cols) of the unified cortical sheet. Defaults to the fixed sheet
         # size and is refined in __call__ to match the coordinates actually passed in, so no
         # precomputed grid cache is needed.
-        self.height, self.width = 304, 512
+        self.height, self.width = SHEET.n_row, SHEET.n_col
 
     def __call__(self, positions=None, activations=None):
         """

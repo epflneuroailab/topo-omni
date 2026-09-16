@@ -7,7 +7,7 @@ fetched. By default it pulls the public release from HuggingFace
 to evaluate your own checkpoint.
 
 Inference only. We set ``apply_spatial_loss=True`` so that every ``forward`` assembles
-and returns the unified 304x512 cortical sheet — but the spatial loss itself (and hence
+and returns the unified 309x512 cortical sheet — but the spatial loss itself (and hence
 the *training-only* neighborhood/position files under ``position_dir``) is never touched,
 because the loss branch runs only when ``labels`` are passed, which none of the eval
 scripts do. A fresh clone therefore needs the model weights and nothing else.
@@ -15,6 +15,8 @@ scripts do. A fresh clone therefore needs the model weights and nothing else.
 import os
 
 import numpy as np
+
+from src.models.spatial_utils import DEFAULT_SHEET_LAYOUT
 import torch
 
 from transformers import Qwen2_5OmniProcessor, Qwen2_5OmniThinkerConfig
@@ -31,7 +33,7 @@ MODEL_TITLE = "topo-omni"    # topographic model
 BASELINE_TITLE = "qwen2_5_3b_task_7"               # non-topographic control
 
 # Unified cortical-sheet dimensions (rows x cols). See README "Cortical Sheet".
-SHEET_H, SHEET_W = 304, 512
+SHEET_H, SHEET_W = DEFAULT_SHEET_LAYOUT.n_row, DEFAULT_SHEET_LAYOUT.n_col
 
 
 def resolve_model_id(model=None, baseline=False):
@@ -45,7 +47,8 @@ def resolve_model_id(model=None, baseline=False):
     return model or os.getenv("TOPO_OMNI_MODEL", DEFAULT_MODEL)
 
 
-def load_topo_omni(model=None, device="cuda", baseline=False, dtype=None):
+def load_topo_omni(model=None, device="cuda", baseline=False, random_init=False,
+                   dtype=None):
     """Load the Topo-Omni model, processor, and config for inference.
 
     Args:
@@ -53,16 +56,25 @@ def load_topo_omni(model=None, device="cuda", baseline=False, dtype=None):
             ``$TOPO_OMNI_MODEL`` or ``epfl-neuroai/topo-omni``.
         device: torch device string (``"cuda"`` / ``"cpu"``).
         baseline: load the non-topographic Qwen2.5-Omni-3B control instead.
+        random_init: build the architecture from config with NO pretrained weights -- the
+            analogue of TDANN's "Unoptimized" bar. Distinct from ``baseline``, which keeps
+            the pretrained backbone and only neutralises the cortical adaptors.
         dtype: torch dtype; defaults to bfloat16 on CUDA, float32 on CPU.
 
     Returns:
         (model, processor, config) with the model in ``.eval()`` mode on ``device``.
     """
-    model_id = resolve_model_id(model, baseline=baseline)
+    if baseline and random_init:
+        raise ValueError("baseline and random_init are mutually exclusive")
+    # A random-init model has no checkpoint of its own; the base repo supplies the
+    # architecture config and the processor only.
+    model_id = BASELINE_MODEL if random_init else resolve_model_id(model, baseline=baseline)
     if dtype is None:
         dtype = torch.bfloat16 if str(device).startswith("cuda") else torch.float32
 
-    print(f"> Loading {'baseline Qwen2.5-Omni' if baseline else 'Topo-Omni'} model from: {model_id}")
+    kind = ("randomly initialised Qwen2.5-Omni (architecture only)" if random_init
+            else "baseline Qwen2.5-Omni" if baseline else "Topo-Omni")
+    print(f"> Loading {kind} model from: {model_id}")
     processor = Qwen2_5OmniProcessor.from_pretrained(model_id)
     config = Qwen2_5OmniThinkerConfig.from_pretrained(model_id)
 
@@ -77,13 +89,25 @@ def load_topo_omni(model=None, device="cuda", baseline=False, dtype=None):
     if str(device).startswith("cuda"):
         model_kwargs["device_map"] = torch.device(device)
 
-    model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(model_id, **model_kwargs)
+    if random_init:
+        # `_from_config` builds the architecture straight from the config and never reads
+        # the checkpoint, so there is nothing to materialise on disk. It also honours
+        # `dtype`, so the weights are created directly in bf16 rather than fp32-then-cast.
+        model = Qwen2_5OmniThinkerForConditionalGeneration._from_config(config, dtype=dtype)
+        if str(device).startswith("cuda"):
+            model = model.to(device)
+    else:
+        model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(model_id, **model_kwargs)
 
-    if baseline:
-        # The stock base model has no trained cortical projection; make it a pass-through.
+    if baseline or random_init:
+        # No trained cortical projection: make the adaptors a pass-through. For random_init
+        # this matters twice over -- the constructor seeds W with `torch.randn`, ~35x the
+        # identity's scale, which would sit in the residual stream of every layer and give
+        # a broken model rather than an untrained one.
         model.init_cortical_layers(epsilon=0, identity=True)
 
     model.to(device).eval()
+    model.refresh_cortical_pinv()
     return model, processor, config
 
 
