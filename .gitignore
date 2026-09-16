@@ -1,16 +1,18 @@
 # --- secrets / local env ---
 .env
-
 # --- python ---
 __pycache__/
 *.py[cod]
 *.egg-info/
 .ipynb_checkpoints/
+.vscode
 
 # --- reproduction outputs (regenerated, never committed) ---
 figures_out/
 outputs/
 results/
+logs/
+
 # downloaded precomputed cut + reference renders (see download_precomputed.py)
 _precomputed_cut/
 _reference_figures/
@@ -22,11 +24,55 @@ data/figures
 # --- model weights / large artifacts ---
 *.safetensors
 *.pt
+# real artifact trees (moved out of src/ so src/ holds only source code)
+artifacts/
 ckpts/
 neighborhoods/
 positions/
+wandb
+# back-compat symlinks src/{ckpts,neighborhoods,wandb} -> ../artifacts/*.
+# Listed explicitly: a `foo/` pattern does not match a symlink, only a real directory.
+src/ckpts
+src/neighborhoods
+src/wandb
+runai_output.txt
+
+# --- restructure safety backups (see README history) ---
+_restructure_backup_*.tar.gz
 
 # --- os cruft ---
 .DS_Store
 
 # NOTE: fMRI/ has its own .gitignore; this file covers the model side only.
+
+# Copyrighted publication figure (Nauhaus et al. 2012, Nat Neurosci), fetched on
+# demand by src/experiments/orientation/macaque_map.py to reconstruct the macaque reference
+# curve. Analysis input only -- do not redistribute. The derived curve is cached in
+# data/macaque_delta_curve.npz, which is safe to track.
+data/_nauhaus_fig2.jpg
+
+# transient per-condition eval configs written by scripts/run_selectivity.py
+src/configs/eval/condition_tmp*.yml
+
+# --- large data artifacts (exceed or approach GitHub limits; regenerate or fetch) ---
+data/tdann/
+data/imagenet_images.json
+data/dtd_images.json
+
+# --- derived analysis caches and source databases (regenerate or fetch) ---
+data/*.npz
+data/*.mat
+
+# --- archives of any kind (restructure snapshots, downloaded bundles) ---
+*.tar.gz
+*.tgz
+*.zip
+
+# --- editor / pre-refactor scratch copies ---
+*.bak
+*.bak-*
+*.pre32
+
+# Copyrighted publication figure (Livingstone 1984, Fig 27B). Analysis input only --
+# do not redistribute. Referenced by src/experiments/orientation/smoothness_panels.py.
+data/Livingstone_1984_Figure27B.png
