@@ -24,9 +24,9 @@ def write_config(config, config_path):
 
 def eval_condition(config):
     # Unique per WRITE, not per (condition, pid). Several of these run at once against the
-    # same NFS checkout (one runai job per condition/half, see
-    # submit_topoomni_selectivity.sh), so a shared filename lets one job's config be
-    # evaluated under another job's name and makes os.remove crash the rest.
+    # same NFS checkout (one runai job per condition/half), so a shared filename lets one
+    # job's config be evaluated under another job's name and makes os.remove crash
+    # the rest.
     #
     # os.getpid() is NOT enough: each job is its own container, so the pid is frequently
     # IDENTICAL across jobs (42 in this image). Two jobs differing only by --odd_or_even

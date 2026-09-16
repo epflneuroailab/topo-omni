@@ -98,7 +98,13 @@ topo-omni/
 │   │   │   ├── contrast.py       #   cluster contrasts
 │   │   │   ├── run_clusters_iou.py, explore_cluster_iou.py   # IoU vs null
 │   │   │   ├── plot_selectivity.py, plot_corr.py
-│   │   │   └── correlate_t_values.py            # model vs fMRI t-maps
+│   │   │   ├── correlate_t_values.py            # model vs fMRI t-maps
+│   │   │   │                     # unsupervised discovery chain (was topo-discover/):
+│   │   │   ├── extract_video_embeddings.py, compile_embeddings.py   # per-clip embeddings
+│   │   │   ├── agglomerative_early_stopping.py, merge_clusters.py,  # cluster
+│   │   │   │   plot_dendrogram.py
+│   │   │   └── create_cluster_manifest.py, calculate_selectivity.py, # label + inspect
+│   │   │       plot_model_selectivity.py, make_cluster_collages.py
 │   │   └── brain_alignment/      # Encoding-model alignment to human fMRI
 │   │       ├── plot_barplot.py
 │   │       └── table.py, table_stats.py
@@ -124,18 +130,6 @@ topo-omni/
 │   ├── submit_topoomni_spacetop_discovery.sh
 │   ├── submit_topoomni_stimulation.sh
 │   └── figures/                  # Scripts that reproduce individual paper figures
-├── topo-discover/                # Unsupervised discovery of functionally selective clusters
-│   │                             # from video-driven model embeddings (extract → cluster → label)
-│   ├── extract_video_embeddings.py
-│   ├── compile_embeddings.py
-│   ├── agglomerative_early_stopping.py
-│   ├── plot_dendrogram.py
-│   ├── merge_clusters.py
-│   ├── create_cluster_manifest.py
-│   ├── calculate_selectivity.py
-│   ├── plot_model_selectivity.py
-│   ├── make_cluster_collages.py
-│   └── scripts/
 ├── data/                         # Small tracked artifacts (summary CSVs, figures);
 │                                 # large stimuli/checkpoints/datasets are gitignored
 ├── fMRI/                         # ⚠ SEPARATE SUBPROJECT — brain-side, not the model.
@@ -156,7 +150,7 @@ experiment folders under `src/experiments/`. To follow a figure back to its sour
 | Figure | Reproduce with | Experiment folder(s) |
 |--------|----------------|----------------------|
 | 1a | `scripts/figures/figure_1a.py` | `experiments/selectivity/` — unified sheet, tiled32 run |
-| 2c | `scripts/figures/figure_2.py` | `experiments/spacetop_discovery/` (+ `topo-discover/`) |
+| 2c | `scripts/figures/figure_2.py` | `experiments/spacetop_discovery/` |
 | 3 | `scripts/figures/figure_3.py` | `experiments/selectivity/`, `experiments/response_profiles/`, `experiments/retinotopy/` |
 | 4 | `scripts/figures/figure_4.py` | `experiments/tonotopy/`, `experiments/response_profiles/` |
 | 5 | `scripts/figures/figure_5.py` | `experiments/response_profiles/` |
@@ -171,11 +165,17 @@ input: 10 localizers x a model load each. Either run them sequentially
 python scripts/run_selectivity.py --model_name topo-omni-tiled32-4608 --fwhm 3.0
 ```
 
-or fan them out to one single-GPU runai job per localizer (A100 `default` pool):
+or restrict it to a subset of localizers:
 
 ```bash
-./submit_topoomni_selectivity.sh            # all 10; add e.g. `faces,scenes` for a subset
+python scripts/run_selectivity.py --model_name topo-omni-tiled32-4608 --fwhm 3.0 \
+    --conditions faces,scenes
 ```
+
+To fan out across the cluster instead, submit that same command once per localizer as
+its own single-GPU runai job (A100 `default` pool) — no wrapper script ships with
+the repo. `run_selectivity.py` tags each job's transient eval config with a uuid, so
+concurrent jobs sharing the NFS checkout cannot clobber one another's config.
 
 Both write `results/topo-omni-tiled32-4608/<localizer>/<localizer>_fwhm3.0_selectivity_stats.pkl`,
 which is what `scripts/figures/figure_1a.py` reads.
@@ -517,13 +517,13 @@ bash scripts/run_iou.sh
 
 ## Cluster discovery
 
-`topo-discover/` runs an unsupervised pipeline to find functionally selective clusters from video-driven activations: extract per-clip embeddings (`extract_video_embeddings.py`, `compile_embeddings.py`), agglomeratively cluster them (`agglomerative_early_stopping.py`, `plot_dendrogram.py`, `merge_clusters.py`), then label and inspect the resulting clusters (`create_cluster_manifest.py`, `calculate_selectivity.py`, `plot_model_selectivity.py`, `make_cluster_collages.py`).
+`src/experiments/spacetop_discovery/` runs an unsupervised pipeline to find functionally selective clusters from video-driven activations: extract per-clip embeddings (`extract_video_embeddings.py`, `compile_embeddings.py`), agglomeratively cluster them (`agglomerative_early_stopping.py`, `plot_dendrogram.py`, `merge_clusters.py`), then label and inspect the resulting clusters (`create_cluster_manifest.py`, `calculate_selectivity.py`, `plot_model_selectivity.py`, `make_cluster_collages.py`).
 
 ---
 
 ## fMRI analyses (`fMRI/`)
 
-**[`fMRI/`](fMRI/) is a self-contained subproject and is quite different from the rest of this repository.** Everything above (`src/`, `scripts/`, `topo-discover/`) builds, trains, and analyzes the *model*; `fMRI/` instead reanalyzes the *human brain data*. It holds the brain-side pipelines for the three human-fMRI datasets validated in the paper — **Pernet 2015** (voice), **Marvi 2025** (localizers), and **Jung 2025 / SpaceTop** (naturalistic movie) — reproducing the paper's brain figures. It has its **own dependency stack (Nilearn — not torch/transformers), its own per-dataset conda environments, its own data (hosted on OSF, not in git), and its own docs**; it shares only dataset *names* with `src/`, no data and no code. Each dataset runs a two-stage pipeline (Stage 0 preprocessing → Stage 1 analysis → figures) with two entry points — start from the hosted **precomputed cut** (default, recommended) or rebuild from **raw** scans (`--input-source raw`). Full setup + details: [`fMRI/README.md`](fMRI/README.md); design rationale: [`fMRI/docs/DESIGN.md`](fMRI/docs/DESIGN.md).
+**[`fMRI/`](fMRI/) is a self-contained subproject and is quite different from the rest of this repository.** Everything above (`src/`, `scripts/`) builds, trains, and analyzes the *model*; `fMRI/` instead reanalyzes the *human brain data*. It holds the brain-side pipelines for the three human-fMRI datasets validated in the paper — **Pernet 2015** (voice), **Marvi 2025** (localizers), and **Jung 2025 / SpaceTop** (naturalistic movie) — reproducing the paper's brain figures. It has its **own dependency stack (Nilearn — not torch/transformers), its own per-dataset conda environments, its own data (hosted on OSF, not in git), and its own docs**; it shares only dataset *names* with `src/`, no data and no code. Each dataset runs a two-stage pipeline (Stage 0 preprocessing → Stage 1 analysis → figures) with two entry points — start from the hosted **precomputed cut** (default, recommended) or rebuild from **raw** scans (`--input-source raw`). Full setup + details: [`fMRI/README.md`](fMRI/README.md); design rationale: [`fMRI/docs/DESIGN.md`](fMRI/docs/DESIGN.md).
 
 Data and figures are **not** in git — the precomputed cut is hosted on OSF (umbrella https://osf.io/ehrt6/, DOI [10.17605/OSF.IO/EHRT6](https://doi.org/10.17605/OSF.IO/EHRT6); one component per dataset, all public). **`make_all_figures.py` renders from a cut that must already be on disk — it does not download or preprocess anything**, so you must first either download the cut from OSF (`download_precomputed.py`) **or** produce it yourself via Stage-0 preprocessing (`--input-source raw`; see [`fMRI/README.md`](fMRI/README.md)). Reproduce from a clean checkout:
 
