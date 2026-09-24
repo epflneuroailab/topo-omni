@@ -56,11 +56,13 @@ def convolve_with_hrf(regressor, tr=TR):
     return convolved
 
 
-def load_run_info(subject_id, bold_dir):
+def load_run_info(subject_id, bold_dir, exclude_runs=None):
     """Load run TR boundaries for a subject: dict {(session, run): (start_tr, end_tr)}.
 
     Boundaries come from the number of darrays (= TRs) in each fsaverage6 hemi-L GIFTI,
-    concatenated in sorted (session, run) order.
+    concatenated in sorted (session, run) order. Runs in ``exclude_runs`` ({(session, run)})
+    are skipped and the remaining runs are numbered contiguously, matching
+    glm_engine.load_bold/load_confounds with the same exclusions.
     """
     import nibabel as nib
 
@@ -78,6 +80,8 @@ def load_run_info(subject_id, bold_dir):
         parts = bold_file.stem.split('_')
         session = [p for p in parts if p.startswith('ses-')][0]
         run = [p for p in parts if p.startswith('run-')][0]
+        if exclude_runs and (session, run) in exclude_runs:
+            continue
 
         bold_data = nib.load(str(bold_file))
         n_trs = len(bold_data.darrays)

@@ -33,6 +33,26 @@ N_SUBJECTS_PUBLISHED = 78
 DF_PUBLISHED = 77
 CONFOUND_DROPPED_SUBJECTS = ("0035", "0044", "0061", "0084", "0131")
 
+# --- Runs with a copied events file (ds005256 v1.1.0 data defect; found 2026-09-23) ---
+# For each of these four KEPT subjects, the listed run's task-alignvideo events.tsv holds
+# ONLY video rows (no rating rows), and those rows (onset, duration, stim_file) are identical
+# to another run's (the value = that source run, whose own file is complete). The BOLD is
+# the listed run (length = the canonical run's for sub-0021 / sub-0065; shorter for
+# sub-0094 / sub-0105), so that run's true video timing is UNKNOWN. The published maps modeled these
+# runs with the wrong videos (their six paper clusters kept n=78; 16 non-paper new54
+# clusters lost one of these subjects). Remedy decided by the authors 2026-09-23: drop
+# exactly these runs (opt-in `--exclude-broken-runs`; outputs under *_exclbrokenruns).
+# A subject whose target videos fall ONLY in its excluded run still drops from that cluster
+# (no data): for new27 that is cluster 8 (sub-0105) and cluster 14 (sub-0094).
+# Pinned by tests/test_exclude_broken_runs.py (byte-copy check on the raw events).
+BROKEN_EVENT_RUNS = {
+    ("sub-0021", "ses-01", "run-03"): "run-04",
+    ("sub-0065", "ses-04", "run-02"): "run-01",
+    ("sub-0094", "ses-04", "run-01"): "run-02",
+    ("sub-0105", "ses-02", "run-02"): "run-01",
+}
+EXCLUDED_RUNS_SUFFIX = "_exclbrokenruns"   # derivatives subdir suffix for the remedied analysis
+
 # --- Acquisition / surface constants (dev src/glm_unified.py, create_regressors_unified.py) ---
 TR = 0.46                       # seconds; multiband-8, 3T Prisma
 SURFACE = "fsaverage6"
@@ -100,6 +120,19 @@ CLUSTERS = {
         "model_json": f"{CLUSTER_ASSIGNMENTS_DIR}/54_cluster.json",
         "assignments_csv": f"{CLUSTER_ASSIGNMENTS_DIR}/cluster_assignments_new54clusters.csv",
         "derivatives_subdir": "cluster_contrasts_new54clusters",
+    },
+    # Rebuttal rerun (Sep 2026): the SAME cluster-vs-others fMRI validation on the partition
+    # from the new Topo-Omni checkpoint (Badr's spacetop_discovery step-4 output,
+    # `clusters_tvals_final.json` = raw dendrogram leaves, no hand merge). NOT a paper figure;
+    # all 27 clusters are run (slurm/cluster_contrasts_array.sbatch) and tabulated
+    # (analysis/summarize_family.py). Provenance: data/PROVENANCE.md.
+    "new27": {
+        "lineage": ["44", "45"],
+        "model_json": f"{CLUSTER_ASSIGNMENTS_DIR}/27_cluster.json",
+        "model_json_sha256": "5f2cd1b5959ee27c3f0bfb2b4ce2fa30d18affa6471d8115f9a49a1577437ead",
+        "assignments_csv": f"{CLUSTER_ASSIGNMENTS_DIR}/cluster_assignments_new27clusters.csv",
+        "derivatives_subdir": "cluster_contrasts_new27clusters",
+        "n_clusters": 27,
     },
 }
 

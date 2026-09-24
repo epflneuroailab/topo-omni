@@ -27,6 +27,8 @@ _CANDIDATE_RAW = [
 
 CASES = [
     ("54_cluster.json", "cluster_assignments_new54clusters.csv"),
+    # Sep 2026 rebuttal rerun on the new-model partition (tests/test_new27_family.py).
+    ("27_cluster.json", "cluster_assignments_new27clusters.csv"),
 ]
 
 
@@ -71,3 +73,28 @@ def test_parse_reproduces_vendored_csv_bitwise(tmp_path, json_name, csv_name):
     produced = out.read_text()
     vendored = (_DATA / csv_name).read_text()
     assert produced == vendored, f"{csv_name}: parsed CSV differs from vendored golden"
+
+
+@pytest.mark.parametrize("json_name,csv_name", CASES)
+def test_parse_maps_every_clip_exactly_once(json_name, csv_name):
+    """No clip may be silently dropped between the model JSON and the design CSV.
+
+    `parse` only *prints* its failures (filename, missing event, clip past video end), so
+    a dropped clip would shrink a cluster's target regressor without any error. Pin that
+    the CSV rows are exactly the JSON clips, each once, with the JSON cluster ID.
+    """
+    import json
+
+    raw = _resolve_raw()
+    if raw is None:
+        pytest.skip("raw ds005256 (sub-0001 events) not found (set JUNG_RAW_ROOT)")
+
+    clusters = json.loads((_DATA / json_name).read_text())
+    expected = {v: c["cluster_id"] for c in clusters for v in c["video_ids"]}
+
+    got = _load_parser().parse(str(_DATA / json_name), str(raw))
+
+    assert len(got) == len(expected)
+    assert dict(zip(got["clip_filename"], got["cluster_id"])) == expected
+    assert (got["clip_duration_actual"] > 0).all()
+    assert (got["clip_duration_actual"] <= 2).all()
