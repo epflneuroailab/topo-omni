@@ -6,6 +6,8 @@ order, each lineage pinned by a golden master first (docs/DESIGN.md §6, §9).
 - **Branch A** `06` → splits → frois → CV → extract → plot ...... Fig. A2 fROI profiles
 - **Branch B** `08` → `09` → `11` → `12/18` → `10/19` ........... Figs. 2 & 3 surface maps
   (individual-subject fsnative; concat GLM `08`, not per-run `07`)
+- **Fig. 1b** `data/PARCELS/` → fsaverage6 ....................... Fig. 1b brain panel
+  (atlas-only; no subject data)
 
 ## Modules
 
@@ -20,6 +22,8 @@ Branch B: [`concatenated_glm.py`](concatenated_glm.py) (08) →
 [`convert_inflated_surfaces.py`](convert_inflated_surfaces.py) (11) →
 [`project_parcels_to_surface.py`](project_parcels_to_surface.py) (12/18) →
 [`visualize_native_surface.py`](visualize_native_surface.py) (10/19).
+
+Fig. 1b: [`plot_figure_1b_parcels.py`](plot_figure_1b_parcels.py).
 
 Which numbers are frozen CI goldens vs one-off spot-checks: see the reproducibility
 table in [`../README.md`](../README.md).

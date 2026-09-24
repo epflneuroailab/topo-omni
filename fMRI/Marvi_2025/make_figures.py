@@ -5,6 +5,8 @@ Figure lineages ported here (allow-list; docs/DESIGN.md §2.4):
   - Fig. A2 fROI profiles (Branch A): 06 -> splits -> frois -> CV -> extract -> plot
   - Figs. 2 & 3 surface maps (Branch B): 08 -> 09 -> 11 -> 12/18 -> 10/19
     (individual-subject fsnative; concat GLM 08, NOT per-run 07 — docs/DESIGN.md §7)
+  - Fig. 1b brain panel: vendored parcels -> fsaverage6 -> filled regions
+    (atlas-only: needs no cut, so it runs without --derivatives-root)
 
 Precomputed cut = fMRIPrep derivatives -> --derivatives-root.
 
@@ -38,7 +40,7 @@ import config
 
 _HERE = Path(__file__).resolve().parent
 
-FIGURES = ("figA2_froi_profiles", "fig2_surface", "fig3_surface")
+FIGURES = ("figA2_froi_profiles", "fig2_surface", "fig3_surface", "fig1b_parcels")
 
 # Branch A cross-validated fROIs need the even/odd split GLMs (define_frois / cross_validation
 # / extract_condition_responses all read the split dirs).
@@ -189,6 +191,21 @@ def render_fig2_fig3(args) -> Path:
         Path(plots), "signed_log_p", 3.0, 0.05, no_contours)
 
 
+def render_fig1b(args) -> Path:
+    """Fig. 1b brain panel: the EMFL visual parcels on fsaverage6, with and without LOC.
+
+    Atlas-only (vendored data/PARCELS + nilearn's fsaverage6), so no --derivatives-root. Both
+    variants are rendered, because both were made for the paper.
+    """
+    plots = Path(args.plots_root) / "fig1b_parcels"
+    from analysis import plot_figure_1b_parcels
+
+    print(f"[fig1b] parcels -> fsaverage6 (with and without LOC) -> {plots}")
+    plot_figure_1b_parcels.main(["--output-dir", str(plots)])
+    plot_figure_1b_parcels.main(["--output-dir", str(plots), "--no-loc"])
+    return plots
+
+
 def render_figures(args) -> int:
     """Render the requested figures from the (now-present) precomputed cut."""
     produced = []
@@ -198,6 +215,10 @@ def render_figures(args) -> int:
     # Fig. 2 (visual) and Fig. 3 (auditory-cognitive) share the one native-surface render pass.
     if any(f in args.figures for f in ("fig2_surface", "fig3_surface")):
         produced.append(render_fig2_fig3(args))
+
+    # Last: it needs no cut, so a missing --derivatives-root fails the figures above first.
+    if "fig1b_parcels" in args.figures:
+        produced.append(render_fig1b(args))
 
     print("\nFigures produced:")
     for p in produced:

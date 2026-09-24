@@ -22,7 +22,7 @@ pinned by golden-master tests; `make_all_figures.py` orchestrates all three.
 | Folder | Dataset | Paper figures |
 |---|---|---|
 | [`Pernet_2015/`](Pernet_2015/) | Voice localizer (Pernet 2015) | Fig. 3b map + 2-bar profile; Fig. B3b Moran's I |
-| [`Marvi_2025/`](Marvi_2025/) | Multifunction localizer / EMFL (Marvi 2025) | Fig. A2 fROI profiles; Figs. 2 & 3 surface maps |
+| [`Marvi_2025/`](Marvi_2025/) | Multifunction localizer / EMFL (Marvi 2025) | Fig. A2 fROI profiles; Figs. 2 & 3 surface maps; Fig. 1b brain panel |
 | [`Jung_2025/`](Jung_2025/) | Naturalistic movie / cluster discovery (Jung 2025) | Fig. 6 / Fig. D4; Fig. D5 |
 | [`core/`](core/) | Shared utilities (island Moran's I, surface plotting, path resolution) | — |
 | [`environment/`](environment/) | Pinned conda envs (Stage-1 stacks **diverge** — one per dataset) | — |
