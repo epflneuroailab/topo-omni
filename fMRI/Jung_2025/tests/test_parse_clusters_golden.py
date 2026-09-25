@@ -29,6 +29,8 @@ CASES = [
     ("54_cluster.json", "cluster_assignments_new54clusters.csv"),
     # Sep 2026 rebuttal rerun on the new-model partition (tests/test_new27_family.py).
     ("27_cluster.json", "cluster_assignments_new27clusters.csv"),
+    # The same partition cut coarser (min cluster size 60; tests/test_new16_family.py).
+    ("16_cluster.json", "cluster_assignments_new16clusters.csv"),
 ]
 
 

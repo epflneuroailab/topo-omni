@@ -48,7 +48,7 @@ def _clusters():
 # --- registration -----------------------------------------------------------------
 
 def test_new27_family_is_registered_next_to_new54():
-    assert list(config.CLUSTERS) == ["new54", "new27"]
+    assert list(config.CLUSTERS)[:2] == ["new54", "new27"]
     fam = _family()
     assert fam["model_json"] == "data/cluster_assignments/27_cluster.json"
     assert fam["assignments_csv"] == "data/cluster_assignments/cluster_assignments_new27clusters.csv"

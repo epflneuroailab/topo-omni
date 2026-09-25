@@ -12,6 +12,8 @@ supercluster wrappers are NOT ported (docs/DESIGN.md §8).
   - ``--family new27`` → cluster_contrasts_new27clusters/
       Sep 2026 rebuttal rerun on the new-model partition (IDs 0–26; no paper figure).
       Same engine and design; only the cluster-assignment CSV differs.
+  - ``--family new16`` → cluster_contrasts_new16clusters/
+      The same partition cut coarser (min cluster size 60; IDs 0–15; no paper figure).
 
 Reads the fsaverage6 BOLD + confounds under ``--derivatives-root`` and the (raw)
 ``task-alignvideo`` events under ``--bids-root`` (needed for run-relative video onsets);
@@ -35,6 +37,7 @@ from glm_engine import (  # noqa: E402
 FAMILIES = {
     'new54': {'derivatives_subdir': 'cluster_contrasts_new54clusters'},
     'new27': {'derivatives_subdir': 'cluster_contrasts_new27clusters'},
+    'new16': {'derivatives_subdir': 'cluster_contrasts_new16clusters'},
 }
 
 

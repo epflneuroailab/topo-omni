@@ -275,6 +275,13 @@ def test_new27_predicted_subject_counts_with_exclusion():
     assert {c: k for c, k in n.items() if k != 78} == {8: 77, 14: 77}
 
 
+def test_new16_all_clusters_keep_78_with_exclusion():
+    if _bids() is None or not (_bids() / "derivatives").is_dir():
+        pytest.skip("ds005256 + derivatives not found")
+    # The merges containing new27 clusters 8 and 14 bring sub-0105 / sub-0094 back.
+    assert set(_predicted_n("new16", exclude=True).values()) == {78}
+
+
 def test_paper_clusters_keep_78_with_exclusion():
     if _bids() is None or not (_bids() / "derivatives").is_dir():
         pytest.skip("ds005256 + derivatives not found")

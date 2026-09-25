@@ -134,6 +134,28 @@ CLUSTERS = {
         "derivatives_subdir": "cluster_contrasts_new27clusters",
         "n_clusters": 27,
     },
+    # Rebuttal rerun, coarser cut (Sep 2026): same checkpoint and disjoint clips as new27, cut
+    # higher in the dendrogram with min cluster size 60 (`clusters_tvals_disjoint_min60.json`).
+    # Every new16 cluster is a union of whole new27 clusters (NEW16_FROM_NEW27). NOT a paper
+    # figure; compared with new27 / new54 by analysis/compare_families.py.
+    "new16": {
+        "lineage": ["44", "45"],
+        "model_json": f"{CLUSTER_ASSIGNMENTS_DIR}/16_cluster.json",
+        "model_json_sha256": "d1b5bd5489f2396469d4c9020ff9fce3c3db5564a0e58eef066137e4f8427078",
+        "assignments_csv": f"{CLUSTER_ASSIGNMENTS_DIR}/cluster_assignments_new16clusters.csv",
+        "derivatives_subdir": "cluster_contrasts_new16clusters",
+        "n_clusters": 16,
+    },
+}
+
+# new16 cluster ID -> the new27 cluster IDs it is the union of (whole clusters; verified from
+# the two JSONs, pinned by tests/test_new16_family.py). A single ID = the identical clip set,
+# hence the identical GLM design (the design depends only on the target clips), so those maps
+# must reproduce the new27 ones.
+NEW16_FROM_NEW27 = {
+    0: [0, 1], 1: [2, 3], 2: [4], 3: [5], 4: [6], 5: [7], 6: [8, 9], 7: [10, 11, 12],
+    8: [13], 9: [14, 15], 10: [16, 17], 11: [18], 12: [19, 20], 13: [21], 14: [22],
+    15: [23, 24, 25, 26],
 }
 
 # Published figures -> new54 cluster IDs (single discovered clusters). Both figures draw

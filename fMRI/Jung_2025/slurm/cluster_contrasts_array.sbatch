@@ -21,7 +21,7 @@
 # Measured cost: ~2 h and <52 GB per cluster on bigmem (July 2026 calibration; the Sep 2026
 # smoke run took 80 s and 20 GB peak per subject).
 # The array range above covers the new27 family (IDs 0-26); override on the command line for
-# other families, e.g. --array=0-53 FAMILY=new54.
+# other families, e.g. --array=0-53 FAMILY=new54, or --array=0-15 FAMILY=new16.
 #
 # Submit FROM fMRI/Jung_2025 (paths and the log dir are relative to it):
 #   cd fMRI/Jung_2025 && mkdir -p slurm/logs

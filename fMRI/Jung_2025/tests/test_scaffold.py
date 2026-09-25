@@ -53,8 +53,9 @@ def test_figures_are_the_two_paper_branches():
     assert config.FIGURES["fig6_d4"]["ids"] == [5, 32, 49]
     assert config.FIGURES["figD5"]["ids"] == [6, 30, 31]
     # new54 is the published family; new27 (Sep 2026 rebuttal rerun) is registered next to it
-    # but backs no paper figure (tests/test_new27_family.py).
-    assert list(config.CLUSTERS) == ["new54", "new27"]
+    # but backs no paper figure (tests/test_new27_family.py); so does its coarser cut new16
+    # (tests/test_new16_family.py).
+    assert list(config.CLUSTERS) == ["new54", "new27", "new16"]
 
 
 def test_plots_default_to_dataset_plots_dir():

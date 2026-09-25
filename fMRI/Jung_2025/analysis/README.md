@@ -1,13 +1,24 @@
-# Jung_2025/analysis — Stage 1 (Nilearn, glm_unified fsaverage6)
+# Jung_2025/analysis — Stage 1 (cluster-vs-others GLM on fsaverage6)
 
-Testable boundary: precomputed fsaverage6 GIFTIs + confounds → paper figures. Ported
-in index order, each lineage pinned by a golden master first (docs/DESIGN.md §6, §9).
+Testable boundary: precomputed fsaverage6 GIFTIs + confounds → paper figures. The full
+description (figures, goldens, running, the Sep 2026 rebuttal reruns) is in the dataset
+[`README.md`](../README.md); this file only maps the modules.
 
-- `40` → `41` → `17_v2` (IDs 2/12/13) ...... Fig. 6 / Fig. D4  (14-cluster)
-- `44` → `45` → `47`   (IDs 6/30/31) ....... Fig. D5           (54-cluster)
+All six paper maps are single clusters of the one 54-cluster partition (new54):
 
-Hard invariant pinned by characterization test: **n=78 / df=77** — the confound
-loader drops exactly {0035, 0044, 0061, 0084, 0131}, which is what produced the
-published maps (docs/DESIGN.md §7). Not a bug to fix; a behavior to preserve.
+- `44` → `45` → `47` (IDs 5/32/49) ...... Fig. 6 / Fig. D4
+- `44` → `45` → `47` (IDs 6/30/31) ...... Fig. D5
 
-STATUS: scaffold.
+| Module | Role |
+|---|---|
+| `parse_clusters.py` | model JSON + sub-0001 events → cluster-assignment CSV |
+| `regressors.py` | HRF-convolved target/others design regressors |
+| `glm_engine.py` | per-subject OLS GLM → group t-test → FDR; hosts the n=78 drop |
+| `cluster_contrasts.py` | driver: one cluster of a family (new54 / new27 / new16); `--exclude-broken-runs` |
+| `visualize_clusters.py` | top-10%-of-FDR inflated HTML |
+| `summarize_family.py` | one row per cluster: max t, joint-hemisphere FDR survivors, n, content |
+| `compare_families.py` | a family vs a reference family: clip overlap, t-map r, Dice (FDR, top 10% of FDR, top 10% of all); `--ids` / `--all-pairs` for targeted tables |
+
+Hard invariant pinned by characterization test: **n=78 / df=77**. The confound loader
+drops exactly {0035, 0044, 0061, 0084, 0131}, which is what produced the published maps
+(docs/DESIGN.md §7). This is behavior to preserve, not a bug to fix.
