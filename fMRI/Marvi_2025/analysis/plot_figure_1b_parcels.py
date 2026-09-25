@@ -14,10 +14,11 @@ Regions (``ROI_DEFS`` order; where two overlap, the later one wins):
   3  VWFA   — VWFA (left only)
   4  Faces  — FFA + OFA + STS (bilateral)
 
-Colours are the visual family of the Topo-Omni palette (``palette_left`` in
-``src/experiments/response_profiles/plot.py``), so each category has the same colour on the
-model map (Fig. 1a) and here. Scenes and faces kept their earlier colours; objects (LOC) was
-#EFC94C and words (VWFA) was #D4AC0D (Sep 2026 change). Bodies (#F39B2F) has no region here.
+Colours are the visual family of the Topo-Omni palette, in the version of 2026-09-25
+(Badr AlKhamissi's swatch sheet: warm earth tones for the visual categories, teal -> navy for
+the non-visual ones). Only the visual family is used here. Bodies (#BF8649) has no region.
+Earlier versions: faces #E64B35, scenes #F1C232, objects #EFC94C then #A0522D, words #D4AC0D
+then #9C6B00.
 
 Port of the dev script ``20251030_Marvi_2025_efficient_fMRI_localizer/src/
 visualize_roi_parcels_surface.py`` (untracked in that repo; copied 2026-09-24). Changes: the
@@ -57,11 +58,11 @@ logger = logging.getLogger(__name__)
 # Visual family of the Topo-Omni palette, keyed by EMFL condition. The one place to edit when
 # the palette changes.
 CATEGORY_COLORS = {
-    'faces': '#E64B35',
-    'bodies': '#F39B2F',   # no bodies region in this panel
-    'scenes': '#F1C232',
-    'objects': '#A0522D',  # was #EFC94C
-    'words': '#9C6B00',    # was #D4AC0D
+    'faces': '#A04D3B',    # was #E64B35
+    'bodies': '#BF8649',   # was #F39B2F; no bodies region in this panel
+    'scenes': '#CDB34C',   # was #F1C232
+    'objects': '#E7DFA1',  # was #A0522D (before that #EFC94C)
+    'words': '#877C26',    # was #9C6B00 (before that #D4AC0D)
 }
 
 # value: integer label in the surface map (1-based, consecutive; reassigned after --no-loc).
