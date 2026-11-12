@@ -42,7 +42,7 @@ def test_raw_requires_raw_root_for_csv_regen():
     # The raw path regenerates the cluster CSV from events → needs --raw-root.
     with pytest.raises(SystemExit):
         make_figures.main(["--input-source", "raw", "--derivatives-root", "/y",
-                           "--figures", "fig6_d4", "--skip-visualize"])
+                           "--figures", "fig6", "--skip-visualize"])
 
 
 def test_stage0_scripts_present():

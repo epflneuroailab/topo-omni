@@ -83,7 +83,7 @@ def render_cluster(cluster_id, contrast_dir, output_dir, fsaverage,
                    top_percentile=10.0, n_subjects=78, figure_tag=None, label=None):
     """Render top-of-FDR inflated HTML (both hemispheres) for one cluster.
 
-    ``figure_tag`` (e.g. "Fig6-D4") and ``label`` (the author cluster label, e.g. "animals")
+    ``figure_tag`` (e.g. "Fig6") and ``label`` (the author cluster label, e.g. "natural landscapes")
     are folded into the output filename so a reviewer can tell which paper figure / cluster a
     map is without opening it: ``<tag>_cluster05_animals_lh_top10pct_inflated.html``.
     """
@@ -145,7 +145,7 @@ def build_parser():
                    help='Cluster IDs to render (default: all found in --contrast-dir).')
     p.add_argument('--top-percentile', type=float, default=10.0, help='Top %% of FDR survivors (default 10).')
     p.add_argument('--n-subjects', type=int, default=78, help='For df = n-1 (default 78 → df 77, the published analysis).')
-    p.add_argument('--figure-tag', default=None, help='Paper-figure tag folded into filenames (e.g. Fig6-D4).')
+    p.add_argument('--figure-tag', default=None, help='Paper-figure tag folded into filenames (e.g. Fig6).')
     p.add_argument('--cluster-labels', nargs='*', default=None, metavar='ID=LABEL',
                    help='Author cluster labels folded into filenames (e.g. 5=animals 32="natural landscapes").')
     return p

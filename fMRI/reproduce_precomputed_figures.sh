@@ -20,7 +20,7 @@
 #
 # Usage:
 #   ./reproduce_precomputed_figures.sh                       # all 3 datasets
-#   ./reproduce_precomputed_figures.sh Jung_2025             # one dataset (fast, ~143 MB, login-node OK)
+#   ./reproduce_precomputed_figures.sh Jung_2025             # one dataset (fast, ~47 MB, login-node OK)
 #   DATA_DIR=/scratch/cut REF_DIR=/scratch/ref ./reproduce_precomputed_figures.sh
 #   PYTHON=/path/to/python ./reproduce_precomputed_figures.sh
 #

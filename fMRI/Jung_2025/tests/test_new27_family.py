@@ -8,7 +8,7 @@ published new54 maps. These tests pin:
   * the family registration (config + the contrast driver agree),
   * the vendored JSON bytes (sha256 = the file Badr sent),
   * the partition's shape (27 clusters, contiguous 0-based IDs, disjoint clips),
-  * that the published new54 family and figures are untouched.
+  * that new27 backs no paper figure (the revised paper uses its coarser cut new16).
 
 Pure-Python except where noted; no fMRI data required.
 """
@@ -57,9 +57,9 @@ def test_new27_family_is_registered_next_to_new54():
 
 
 def test_new27_is_not_a_paper_figure():
-    # The published figures still draw only from new54; new27 is a rebuttal analysis.
-    assert {k: v["ids"] for k, v in config.FIGURES.items()} == {
-        "fig6_d4": [5, 32, 49], "figD5": [6, 30, 31]}
+    # The revised paper's Fig. 6 draws from new16 (the coarser cut of new27), not new27.
+    assert {k: (v["family"], v["ids"]) for k, v in config.FIGURES.items()} == {
+        "fig6": ("new16", [7, 10])}
     assert config.CLUSTERS["new54"]["model_json"].endswith("54_cluster.json")
 
 

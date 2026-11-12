@@ -9,31 +9,30 @@ figures (AlKhamissi & Mehrer et al., 2026).
 
 ## Figures & lineages (allow-list — docs/DESIGN.md §2.4)
 
-All six brain-validation maps are **single discovered clusters** from the one **54-cluster
-(new54)** partition. (Appendix D's "14 clusters" is a typo for 54 — confirmed by the
-authors, Mehrer + AlKhamissi, 2026-07-07; the 14-/21-/22-cluster branches are **not** in
-the paper. Implementation notes §4.)
+The revised paper (Nature Communications revision, Nov 2026) shows **two single discovered
+clusters of the 16-cluster (`new16`) partition** of the revised checkpoint, with the four
+runs whose events file is a copy of another run **excluded** (`--exclude-broken-runs`,
+section "Runs with a copied events file" below). Both maps are n=78 / df=77.
 
-| Paper figure | Cluster IDs (new54) | Networks | Dev lineage | Golden master (docs/DESIGN.md §6) |
+| Paper figure | Family | Cluster ID | Content | Dev lineage |
 |---|---|---|---|---|
-| Fig. 6 / Fig. D4 | 5, 32, 49 | animals · natural landscapes · **faces** (D4c) | `44` → `45` → `47` | group t/p/mean maps: max\|Δ\| + Pearson r |
-| Fig. D5 | 6, 30, 31 | planetearth · mountainbike ×2 | `44` → `45` → `47` | group t/p/mean maps: max\|Δ\| + Pearson r |
+| Fig. 6a | new16, broken runs excluded | 7 | television news interviews (120 segments, 3 news reports) | `44` → `45` → `47` |
+| Fig. 6b | new16, broken runs excluded | 10 | natural landscapes (155 segments: mountainbike, freesolo, skiing) | `44` → `45` → `47` |
 
-> The **faces network is cluster 49** (`normativeprosocial` videos → right IT near FFA) —
-> strong (maxT 4.38, ~64.7k FDR survivors), **not** the null talking-head clusters
-> (`angrygrandpa`/`harrymetsally`). Semantic labels are the authors'; the auto-derived
-> CSV labels are video-name-based.
+> **Cluster numbering is 0-based** — identical across the model JSON, the CSV, the on-disk
+> `group_cluster-NN` filenames, `config.FIGURES`, and the paper's cluster numbers.
 
-> **Cluster numbering is 0-based (IDs 0–53)** — identical across the model JSON, the CSV,
-> the on-disk `group_cluster-NN` filenames, `config.FIGURES`, and the paper's cluster
-> numbers (no off-by-one; verified via the authors' "cluster 7 is the only non-sig one",
-> which is our null `cluster-07`). Full ID → content → figure table:
-> [`data/cluster_assignments/CLUSTER_INDEX.md`](data/cluster_assignments/CLUSTER_INDEX.md).
+### arXiv v1/v2 maps (`new54`)
 
-Driver: `make_figures.py` (`fig6_d4`, `figD5`). Both figures share one local,
-pure-numpy/scipy/nibabel engine (**no nilearn** at analysis time) and the identical
-cluster-assignment CSV, differing only in which cluster IDs are rendered, so the maps
-reproduce the published derivatives near-bitwise (docs/DESIGN.md §4).
+The preprint showed six single clusters of the **54-cluster (`new54`)** partition of the
+earlier strip model: IDs 5/32/49 (old Fig. 6 / D4: animals, natural landscapes, faces) and
+6/30/31 (old Fig. D5), with all runs kept. They remain reproducible (bitwise goldens below)
+with `analysis/cluster_contrasts.py --family new54`; they are no longer paper figures.
+Full ID → content table: [`data/cluster_assignments/CLUSTER_INDEX.md`](data/cluster_assignments/CLUSTER_INDEX.md).
+
+Driver: `make_figures.py` (`fig6`). One local, pure-numpy/scipy/nibabel engine (**no
+nilearn** at analysis time) for every family; families differ only in the
+cluster-assignment CSV.
 
 ### Release file map (`analysis/`)
 | Release module | Dev source | Role |
@@ -81,7 +80,7 @@ published maps — **not built** (no `--confounds-tolerant` deviation). docs/DES
 `task-alignvideo` `events.tsv` (`--raw-root`; defaults to the derivatives-root's parent).
 
 ```bash
-# default: reproduce all six published maps from the shipped derivatives (no raw, no fMRIPrep)
+# default: reproduce the two Fig. 6 maps from the shipped subject-level t-maps (no raw, no fMRIPrep)
 python make_figures.py --input-source precomputed \
     --derivatives-root <DERIV> --raw-root <BIDS>
 
@@ -108,10 +107,9 @@ bitwise-reproducible (docs/DESIGN.md §2.5/§6).
 
 ## Model-derived inputs (vendored)
 
-The new54 cluster-assignment JSON comes from the topographic model (`topo-omni`) —
-vendored fixture under `data/cluster_assignments/`, pinned by commit + hash in
-`data/PROVENANCE.md`. This release regenerates the **vendored-fixture** version of
-Figs. 6 / D4 / D5; swapped for live `topo-omni` output at merge (docs/DESIGN.md §5).
+The cluster-assignment JSONs (new54, new27, new16) come from the topographic model
+(`topo-omni`) — vendored under `data/cluster_assignments/`, pinned by hash in
+`data/PROVENANCE.md`.
 
 ## Rebuttal rerun (Sep 2026): the new-model partition (`new27`)
 
@@ -119,7 +117,7 @@ The same cluster-vs-others validation, run on **every** cluster of the partition
 by the new Topo-Omni checkpoint (27 raw dendrogram leaves; provenance in
 `data/PROVENANCE.md`). Engine, design, confounds, subjects and thresholds are the
 published ones, with one decided change: the four runs with a copied events file are
-dropped (next section). Not a paper figure.
+dropped (next section). Not a paper figure; the paper uses its coarser cut `new16`.
 
 ```bash
 cd fMRI/Jung_2025 && mkdir -p slurm/logs

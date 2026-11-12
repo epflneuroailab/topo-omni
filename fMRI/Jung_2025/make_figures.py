@@ -1,21 +1,20 @@
 #!/usr/bin/env python
 """Jung 2025 (Spacetop movie) — Stage 1 driver: precomputed cut -> paper figures.
 
-Figure lineages (allow-list; docs/DESIGN.md §2.4). All six brain-validation maps are SINGLE
-discovered clusters from the one 54-cluster (new54) partition (App. D "14 clusters" is a
-typo for 54 — README §4):
-  - Fig. 6 / Fig. D4: parse -> cluster GLM -> visualize   (IDs 5/32/49)  [PORTED]
-      5 = animals, 32 = natural landscapes, 49 = faces (D4c)
-  - Fig. D5:          parse -> cluster GLM -> visualize   (IDs 6/30/31)  [PORTED]
+Figure lineage (allow-list; docs/DESIGN.md §2.4). The revised paper's brain maps are two
+SINGLE discovered clusters of the 16-cluster (new16) partition, with the four runs whose
+events file is a copy of another run excluded (config.BROKEN_EVENT_RUNS):
+  - Fig. 6: parse -> cluster GLM -> visualize   (new16 IDs 7/10)
+      7 = television news interviews (6a), 10 = natural landscapes (6b)
+The arXiv v1/v2 maps (new54 IDs 5/32/49, 6/30/31) are reproduced with
+analysis/cluster_contrasts.py --family new54 directly (README).
 
-Both figures share one engine (analysis/glm_engine.py + regressors.py, pure
-numpy/scipy/nibabel — no nilearn) and the identical cluster-assignment CSV; they differ
-only in which cluster IDs are rendered.
+The engine is analysis/glm_engine.py + regressors.py (pure numpy/scipy/nibabel, no nilearn).
 Reproduces the PUBLISHED n=78 / df=77 analysis (5 canonical subjects drop in the confound
 loader — docs/DESIGN.md §7). Precomputed cut = fsaverage6 GIFTIs + confounds (--derivatives-root).
 
 --input-source precomputed (default): the Tier-1 cut is the shipped per-subject cluster
-  t-maps (cluster_contrasts_new54clusters/subject_level/ — ~1.7 GB), NOT the ~1.5 TB
+  t-maps (cluster_contrasts_new16clusters_exclbrokenruns/subject_level/, ~62 MB), NOT the ~1.5 TB
   fsaverage6 BOLD. `--from-subject-maps` loads those and runs only the deterministic group
   ttest+FDR → render (docs/DESIGN.md §5.1-C). Light — runs on the login node. Uses the vendored
   cluster CSVs (data/cluster_assignments/); no raw download, no fMRIPrep, no per-subject GLM.
@@ -27,7 +26,7 @@ loader — docs/DESIGN.md §7). Precomputed cut = fsaverage6 GIFTIs + confounds 
   container-based step (preprocessing/), faithful-ported and NOT golden-mastered (§2.5/§6).
 The visualize step requires nilearn (pinned 0.12.1); the GLM/group step does not.
 
-STATUS: both Stage-1 figure lineages (parse -> cluster GLM -> visualize) are wired and ported,
+STATUS: the Stage-1 figure lineage (parse -> cluster GLM -> visualize) is wired and ported,
 visualizer included. Stage-0 raw preprocessing is a faithful container port (not
 bitwise-reproducible, so not golden-mastered — docs/DESIGN.md §2.5/§6). The one open item is
 heavy group-map golden tolerance calibration (tests/calibrate_heavy_golden.py, SLURM).
@@ -41,20 +40,23 @@ from pathlib import Path
 
 import config
 
-FIGURES = ("fig6_d4", "figD5")
+FIGURES = tuple(config.FIGURES)
 
 _HERE = Path(__file__).resolve().parent
 _ANALYSIS = _HERE / "analysis"
 
-# figure key -> (cluster family, vendored model JSON, cluster IDs). Both figures use the
-# single new54 family (IDs sourced from config.FIGURES — the authors' Slack mapping).
+# figure key -> (cluster family, vendored model JSON, cluster IDs, exclude broken runs).
+# config.FIGURES is the single source of truth.
 _FIG_SPEC = {
-    key: ("new54", "54_cluster.json", config.FIGURES[key]["ids"])
-    for key in ("fig6_d4", "figD5")
+    key: (fig["family"],
+          config.CLUSTERS[fig["family"]]["model_json"].rsplit("/", 1)[-1],
+          fig["ids"],
+          fig["exclude_broken_runs"])
+    for key, fig in config.FIGURES.items()
 }
 
-# Paper-figure tag folded into rendered filenames (config.FIGURES has the author labels).
-_FIG_TAG = {"fig6_d4": "Fig6-D4", "figD5": "FigD5"}
+# Paper-figure tag folded into rendered filenames (config.FIGURES has the labels).
+_FIG_TAG = {"fig6": "Fig6"}
 
 
 def _load(module_filename: str):
@@ -81,7 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _resolve_csv(figure_key: str, input_source: str, raw_root, results_root) -> str:
     """Return the cluster-assignments CSV path, (re)generating it on the raw path."""
-    family, json_name, _ = _FIG_SPEC[figure_key]
+    family, json_name, _, _ = _FIG_SPEC[figure_key]
     vendored_csv = _HERE / config.CLUSTERS[family]["assignments_csv"]
 
     if input_source == "precomputed":
@@ -100,7 +102,7 @@ def _resolve_csv(figure_key: str, input_source: str, raw_root, results_root) -> 
 
 
 def _run_figure(figure_key: str, args) -> None:
-    family, _, cluster_ids = _FIG_SPEC[figure_key]
+    family, _, cluster_ids, exclude_broken_runs = _FIG_SPEC[figure_key]
     derivatives_root = args.derivatives_root
     if not derivatives_root:
         raise SystemExit("--derivatives-root is required (the precomputed fsaverage6 cut).")
@@ -113,6 +115,8 @@ def _run_figure(figure_key: str, args) -> None:
 
     contrasts = _load("cluster_contrasts.py")
     subdir = contrasts.FAMILIES[family]["derivatives_subdir"]
+    if exclude_broken_runs:
+        subdir += config.EXCLUDED_RUNS_SUFFIX
     output_dir = Path(results_root) / subdir
 
     for cid in cluster_ids:
@@ -124,8 +128,10 @@ def _run_figure(figure_key: str, args) -> None:
             "--bids-root", bids_root,
             "--output-dir", str(output_dir),
         ]
-        # Precomputed cut = shipped subject-level t-maps (the Tier-1 cut, ~186 MB for the 6
-        # published clusters), NOT the ~1.5 TB fsaverage6 BOLD. Render from those instead of
+        if exclude_broken_runs:
+            contrast_argv.append("--exclude-broken-runs")
+        # Precomputed cut = shipped subject-level t-maps (the Tier-1 cut, ~62 MB for the 2
+        # Fig. 6 clusters), NOT the ~1.5 TB fsaverage6 BOLD. Render from those instead of
         # re-fitting the GLM (docs/DESIGN.md §5.1-C). The cut's subject_level/ lives under
         # derivatives-root/<subdir> (read-only); group maps + plots write to output_dir
         # (results-root/<subdir>). --input-source raw regenerates subject_level/ from BOLD.

@@ -4,10 +4,13 @@ Testable boundary: precomputed fsaverage6 GIFTIs + confounds → paper figures. 
 description (figures, goldens, running, the Sep 2026 rebuttal reruns) is in the dataset
 [`README.md`](../README.md); this file only maps the modules.
 
-All six paper maps are single clusters of the one 54-cluster partition (new54):
+The revised paper's maps are two single clusters of the 16-cluster partition (new16),
+broken runs excluded:
 
-- `44` → `45` → `47` (IDs 5/32/49) ...... Fig. 6 / Fig. D4
-- `44` → `45` → `47` (IDs 6/30/31) ...... Fig. D5
+- `44` → `45` → `47` (new16 IDs 7/10, `--exclude-broken-runs`) ...... Fig. 6a/b
+
+The arXiv v1/v2 maps came from the 54-cluster partition (new54): IDs 5/32/49 (old Fig. 6 /
+D4) and 6/30/31 (old Fig. D5).
 
 | Module | Role |
 |---|---|

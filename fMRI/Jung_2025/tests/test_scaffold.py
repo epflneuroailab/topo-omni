@@ -44,18 +44,40 @@ def test_n78_reproduction_pin_is_recorded():
     assert config.RAW_SOURCE["n_subjects_available"] - len(config.CONFOUND_DROPPED_SUBJECTS) == config.N_SUBJECTS_PUBLISHED
 
 
-def test_figures_are_the_two_paper_branches():
-    # Both figures draw from the single new54 family (App. D "14 clusters" = typo for 54).
-    assert make_figures.FIGURES == ("fig6_d4", "figD5")
-    assert make_figures._FIG_SPEC["fig6_d4"] == ("new54", "54_cluster.json", [5, 32, 49])
-    assert make_figures._FIG_SPEC["figD5"] == ("new54", "54_cluster.json", [6, 30, 31])
-    # config is the single source of truth for the figure → cluster-ID mapping.
-    assert config.FIGURES["fig6_d4"]["ids"] == [5, 32, 49]
-    assert config.FIGURES["figD5"]["ids"] == [6, 30, 31]
-    # new54 is the published family; new27 (Sep 2026 rebuttal rerun) is registered next to it
-    # but backs no paper figure (tests/test_new27_family.py); so does its coarser cut new16
-    # (tests/test_new16_family.py).
+def test_figure_is_the_revised_paper_fig6():
+    # The revised paper's Fig. 6 = new16 clusters 7 (TV news interviews) and 10 (natural
+    # landscapes), broken runs excluded. config is the single source of truth.
+    assert make_figures.FIGURES == ("fig6",)
+    assert make_figures._FIG_SPEC["fig6"] == ("new16", "16_cluster.json", [7, 10], True)
+    assert config.FIGURES["fig6"]["ids"] == [7, 10]
+    assert config.FIGURES["fig6"]["family"] == "new16"
+    assert config.FIGURES["fig6"]["exclude_broken_runs"] is True
+    # new54 (arXiv v1/v2 maps) and new27 stay registered as families.
     assert list(config.CLUSTERS) == ["new54", "new27", "new16"]
+
+
+def test_fig6_dispatch_excludes_broken_runs(monkeypatch, tmp_path):
+    # The precomputed path must call the contrast driver with --exclude-broken-runs and read /
+    # write the *_exclbrokenruns subdir (the shipped OSF cut layout).
+    calls = []
+
+    class _FakeContrasts:
+        FAMILIES = {"new16": {"derivatives_subdir": "cluster_contrasts_new16clusters"}}
+
+        @staticmethod
+        def main(argv):
+            calls.append(list(argv))
+            return 0
+
+    monkeypatch.setattr(make_figures, "_load", lambda name: _FakeContrasts)
+    make_figures.main(["--derivatives-root", str(tmp_path), "--skip-visualize"])
+    assert [c[c.index("--cluster-id") + 1] for c in calls] == ["7", "10"]
+    sub = "cluster_contrasts_new16clusters_exclbrokenruns"
+    for argv in calls:
+        assert "--exclude-broken-runs" in argv
+        assert argv[argv.index("--family") + 1] == "new16"
+        assert argv[argv.index("--output-dir") + 1] == str(tmp_path / sub)
+        assert argv[argv.index("--subject-maps-root") + 1] == str(tmp_path / sub)
 
 
 def test_plots_default_to_dataset_plots_dir():

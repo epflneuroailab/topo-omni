@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""Driver: run the cluster-vs-others GLM for one cluster of the new54 family.
+"""Driver: run the cluster-vs-others GLM for one cluster of a family (new54 / new27 / new16).
 
 Path-agnostic port of dev `src/45_new54cluster_contrasts_standard.py` — a thin wrapper
-over the shared engine (20251211_fMRI_movie_watching_spacetop @ 4066746). All six
-published maps are single discovered clusters of the one new54 (54-cluster) partition
-(App. D "14 clusters" is a typo for 54 — README §4); the dev 14-/21-/22-cluster +
-supercluster wrappers are NOT ported (docs/DESIGN.md §8).
+over the shared engine (20251211_fMRI_movie_watching_spacetop @ 4066746). The revised
+paper's Fig. 6 = new16 clusters 7 and 10 with ``--exclude-broken-runs`` (make_figures.py);
+the dev 14-/21-/22-cluster + supercluster wrappers are NOT ported (docs/DESIGN.md §8).
 
   - ``--family new54`` → cluster_contrasts_new54clusters/
-      IDs 5/32/49 → Fig. 6 / D4  ·  IDs 6/30/31 → Fig. D5
+      arXiv v1/v2 maps: IDs 5/32/49 → old Fig. 6 / D4  ·  IDs 6/30/31 → old Fig. D5
   - ``--family new27`` → cluster_contrasts_new27clusters/
       Sep 2026 rebuttal rerun on the new-model partition (IDs 0–26; no paper figure).
       Same engine and design; only the cluster-assignment CSV differs.
