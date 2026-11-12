@@ -12,6 +12,7 @@ figures_out/
 outputs/
 results/
 logs/
+tmp
 
 # downloaded precomputed cut + reference renders (see download_precomputed.py)
 _precomputed_cut/
@@ -58,6 +59,7 @@ src/configs/eval/condition_tmp*.yml
 data/tdann/
 data/imagenet_images.json
 data/dtd_images.json
+topo-omni-overleaf
 
 # --- derived analysis caches and source databases (regenerate or fetch) ---
 data/*.npz
@@ -76,3 +78,9 @@ data/*.mat
 # Copyrighted publication figure (Livingstone 1984, Fig 27B). Analysis input only --
 # do not redistribute. Referenced by src/experiments/orientation/smoothness_panels.py.
 data/Livingstone_1984_Figure27B.png
+
+# --- backup copies of edited files (e.g. run.py.backup-pre-coords) ---
+*.backup*
+
+# --- rebuttal material (scripts/rebuttal/ and any other file or folder named *rebuttal*) ---
+*[Rr]ebuttal*
