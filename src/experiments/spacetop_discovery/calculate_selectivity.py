@@ -21,6 +21,10 @@ from src.experiments.spacetop_discovery.common import (
 )
 
 _cortical_sheets = {}
+# Sheets of clips the walk left in no cluster (the *_unassigned.json sidecar). They are
+# baseline only: the walk scored each cluster against EVERY other clip, so dropping them
+# here would score the same cluster against a different baseline.
+_unassigned = None
 
 
 def _bh_fallback(p: np.ndarray) -> np.ndarray:
@@ -70,8 +74,10 @@ def _summarise(t, q):
 
 def process_cluster(cluster_id):
     target = _cortical_sheets[cluster_id]                       # (n_videos, n_units)
-    baseline = np.concatenate(
-        [_cortical_sheets[cid] for cid in _cortical_sheets if cid != cluster_id], axis=0)
+    parts = [_cortical_sheets[cid] for cid in _cortical_sheets if cid != cluster_id]
+    if _unassigned is not None:
+        parts.append(_unassigned)
+    baseline = np.concatenate(parts, axis=0)
     result = run_stats(target.reshape(target.shape[0], -1),
                        baseline.reshape(baseline.shape[0], -1))
     return cluster_id, _summarise(result["t"], result["q"])
@@ -84,6 +90,10 @@ def main():
     parser.add_argument("--clusters_json", type=str, default=None,
                         help="Default: <output_dir>/clusters_tvals.json")
     parser.add_argument("--save_name", type=str, default="cluster_selectivity_scores_v1.json")
+    parser.add_argument("--unassigned_json", type=str, default=None,
+                        help="clips in no cluster, added to every baseline. Default: "
+                             "<output_dir>/linkage_tree_tvals_min=10_max=500_unassigned.json "
+                             "if it exists.")
     parser.add_argument("--workers", type=int, default=5,
                         help="Clusters scored in parallel. Each holds a full copy of the "
                              "baseline, so this trades RAM for wall clock.")
@@ -106,6 +116,17 @@ def main():
             sheets.append(np.load(path))
         if sheets:
             _cortical_sheets[cluster_id] = np.stack(sheets, axis=0)
+
+    global _unassigned
+    unassigned_path = args.unassigned_json or os.path.join(
+        out, "linkage_tree_tvals_min=10_max=500_unassigned.json")
+    if os.path.exists(unassigned_path):
+        paths = [os.path.join(sheets_dir, f"{os.path.basename(v)}.npy")
+                 for v in read_json(unassigned_path)]
+        extra = [np.load(p) for p in paths if os.path.exists(p)]
+        if extra:
+            _unassigned = np.stack(extra, axis=0)
+            print(f"Baseline also includes {len(extra)} unassigned clips ({unassigned_path})")
 
     cluster_ids = list(_cortical_sheets.keys())
     results = []

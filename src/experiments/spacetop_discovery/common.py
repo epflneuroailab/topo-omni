@@ -40,14 +40,17 @@ CLIPS_SUBDIR = "spacetop_embeddings_v2"
 VIDEOS_SUBDIR = "task-alignvideo"
 
 
-def discovery_dir(model_name: str) -> str:
-    """Where one model's discovery run writes everything: ``$SAVE_DIR/<model>/spacetop_discovery``.
+def discovery_dir(model_name: str, tag: str = None) -> str:
+    """Where one discovery run writes everything: ``$SAVE_DIR/<model>/spacetop_discovery``.
 
     Keyed on the model because the clustering is *guided by that model's cortical
     sheets* -- two checkpoints do not share a cluster tree even though they share
-    the clip embeddings that seed it.
+    the clip embeddings that seed it. ``tag`` suffixes the directory so two runs of
+    the same checkpoint over different clip sets (say prefix vs disjoint clips) do
+    not overwrite each other's sheets, tree and scores.
     """
-    return os.path.join(SAVE_DIR, model_name, "spacetop_discovery")
+    name = "spacetop_discovery" if not tag else f"spacetop_discovery_{tag}"
+    return os.path.join(SAVE_DIR, model_name, name)
 
 
 def clips_dir(root: str = None) -> str:
@@ -111,14 +114,18 @@ def add_run_args(parser, default_model=None):
     parser.add_argument("--spacetop_dir", type=str, default=None,
                         help="root holding task-alignvideo/ and spacetop_embeddings_v2/. "
                              "Default: $SPACETOP_DIR.")
+    parser.add_argument("--run_tag", type=str, default=None,
+                        help="Suffixes the output directory, e.g. 'disjoint2s'. Use it to "
+                             "keep runs of one checkpoint over different clip sets apart.")
     parser.add_argument("--output_dir", type=str, default=None,
-                        help="Default: $SAVE_DIR/<model_name>/spacetop_discovery.")
+                        help="Default: $SAVE_DIR/<model_name>/spacetop_discovery[_<run_tag>].")
     return parser
 
 
 def resolve_run_args(args):
     """Fill in the defaults ``add_run_args`` deferred, and make the output dir."""
     args.spacetop_dir = args.spacetop_dir or SPACETOP_DIR
-    args.output_dir = args.output_dir or discovery_dir(args.model_name)
+    args.output_dir = args.output_dir or discovery_dir(args.model_name,
+                                                       getattr(args, "run_tag", None))
     os.makedirs(args.output_dir, exist_ok=True)
     return args

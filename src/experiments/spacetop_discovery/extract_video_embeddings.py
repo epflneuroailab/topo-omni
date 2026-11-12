@@ -12,6 +12,7 @@ Slow (one model forward per 2s clip), so it shards: run ``--num-groups`` copies 
         --group-index 0 --num-groups 10
 """
 import argparse
+import functools
 import json
 import os
 import subprocess
@@ -31,6 +32,61 @@ EMBED_MODEL = "nvidia/omni-embed-nemotron-3b"
 EMBED_DIM = 2048
 
 
+@functools.lru_cache(maxsize=None)
+def _processor_source(model_name):
+    """Where to load the embedding processor from -- a local dir, not the hub id.
+
+    transformers 4.57's hub path lists a repo's additional chat templates WITH their
+    ``.jinja`` extension and then appends ``.jinja`` again, so it tries to resolve
+    ``additional_chat_templates/sentence_transformers.jinja.jinja``, gets ``None``
+    back, and dies in ``open(None)`` with "expected str, bytes or os.PathLike object,
+    not NoneType". The local-directory branch globs the template dir and uses each
+    file's *stem*, so it is unaffected -- materialise the repo's small files and load
+    from that directory. It is the same cache entry, so nothing is re-downloaded.
+    """
+    if os.path.isdir(model_name):
+        return model_name
+    try:
+        from huggingface_hub import snapshot_download
+        return snapshot_download(
+            model_name,
+            allow_patterns=["*.json", "*.jinja", "*.txt", "*.model",
+                            "additional_chat_templates/*"],
+        )
+    except Exception as exc:
+        print(f"! could not stage processor files locally ({exc}); using {model_name}")
+        return model_name
+
+
+@functools.lru_cache(maxsize=1)
+def _video_encoder():
+    """``(ffmpeg_binary, video_encoder_args)`` for the disjoint cut's re-encode.
+
+    The conda env's ffmpeg 6.1 is built WITHOUT libx264 -- it carries only
+    libopenh264, and `-preset` then fails argument parsing outright. imageio-ffmpeg
+    ships a full static build that does have libx264, so prefer that; fall back to
+    libopenh264 at a fixed bitrate on whatever is on PATH. (ffprobe still comes from
+    PATH -- imageio-ffmpeg ships ffmpeg only.)
+    """
+    candidates = []
+    try:
+        import imageio_ffmpeg
+        candidates.append(imageio_ffmpeg.get_ffmpeg_exe())
+    except Exception:
+        pass
+    candidates.append("ffmpeg")
+
+    for exe in candidates:
+        try:
+            out = subprocess.run([exe, "-hide_banner", "-encoders"],
+                                 capture_output=True, text=True).stdout
+        except Exception:
+            continue
+        if " libx264 " in out:
+            return exe, ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18"]
+    return "ffmpeg", ["-c:v", "libopenh264", "-b:v", "4M"]
+
+
 class OmniEmbedExtractor:
     def __init__(self, model_name=EMBED_MODEL, device="cuda:0"):
         print(f"Loading embedding model: {model_name}")
@@ -41,15 +97,32 @@ class OmniEmbedExtractor:
         self.model = self.model.to(device)
         self.model.eval()
 
-        self.processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True)
+        self.processor = AutoProcessor.from_pretrained(
+            _processor_source(model_name), trust_remote_code=True)
 
-    def split_video_by_time(self, video_path, chunk_duration=2.0, output_dir=None):
-        """Cut `video_path` into chunks with ffmpeg. Returns chunk metadata dicts."""
+    def split_video_by_time(self, video_path, chunk_duration=2.0, output_dir=None,
+                            mode="disjoint"):
+        """Cut `video_path` into clips with ffmpeg. Returns chunk metadata dicts.
+
+        ``mode="disjoint"`` (default) tiles the movie: clip *N* covers
+        ``[2N, 2N+2)``. One segment-muxer pass per movie, with a forced keyframe on
+        every boundary so the cuts are frame-accurate -- stream copy would snap each
+        cut to the nearest existing keyframe, which for a 2s clip can miss the
+        boundary entirely. Costs a re-encode, but only 1 ffmpeg call per movie.
+
+        ``mode="prefix"`` reproduces the original behaviour, in which `start_time`
+        was never advanced so clip *N* was the movie's first ``2(N+1)`` seconds --
+        clips that overlap almost completely and grow to minutes. Kept so the
+        published run stays reproducible; it is not what you want for discovery,
+        because near-identical consecutive prefixes make Ward cluster by movie
+        identity rather than by content.
+        """
         if output_dir is None:
             output_dir = tempfile.mkdtemp()
         else:
             output_dir = Path(output_dir)
             output_dir.mkdir(parents=True, exist_ok=True)
+        output_dir = Path(output_dir)
 
         video_path = Path(video_path)
 
@@ -59,6 +132,50 @@ class OmniEmbedExtractor:
         ]
         duration = float(subprocess.check_output(probe_cmd).decode().strip())
 
+        if mode == "prefix":
+            return self._split_prefix(video_path, duration, chunk_duration, output_dir)
+        if mode != "disjoint":
+            raise ValueError(f"unknown chunk mode {mode!r}")
+
+        pattern = str(output_dir / f"{video_path.stem}_chunk_%04d.mp4")
+        ffmpeg, venc = _video_encoder()
+        cmd = [
+            ffmpeg, '-y', '-i', str(video_path),
+            '-map', '0:v:0', '-map', '0:a:0?',
+            *venc,
+            '-force_key_frames', f'expr:gte(t,n_forced*{chunk_duration})',
+            '-c:a', 'aac', '-b:a', '128k',
+            '-f', 'segment', '-segment_time', str(chunk_duration),
+            '-reset_timestamps', '1',
+            pattern,
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"ffmpeg segment cut failed for {video_path.name} "
+                f"(rc={proc.returncode}):\n{proc.stderr[-2000:]}")
+
+        chunk_files = []
+        for chunk_file in sorted(output_dir.glob(f"{video_path.stem}_chunk_*.mp4")):
+            chunk_idx = int(chunk_file.stem.rsplit("_", 1)[1])
+            start_time = chunk_idx * chunk_duration
+            # The muxer emits a final short remainder; drop it so every clip the model
+            # sees is the same length and `create_cluster_manifest`'s 2s arithmetic holds.
+            if start_time + chunk_duration > duration + 1e-3:
+                chunk_file.unlink()
+                continue
+            chunk_files.append({
+                'path': chunk_file,
+                'chunk_id': chunk_idx,
+                'start_time': start_time,
+                'end_time': start_time + chunk_duration,
+                'duration': chunk_duration,
+            })
+
+        return chunk_files
+
+    def _split_prefix(self, video_path, duration, chunk_duration, output_dir):
+        """Legacy cumulative-prefix cutting -- see `split_video_by_time`."""
         chunk_files = []
         chunk_idx = 0
         start_time = 0.0
@@ -121,13 +238,14 @@ class OmniEmbedExtractor:
         return embeddings.cpu().float().numpy()[0]
 
     def process_video_chunks(self, video_path, chunk_duration=2.0, use_audio=True,
-                             output_dir=None, keep_chunks=False, prompt=None):
+                             output_dir=None, keep_chunks=False, prompt=None,
+                             mode="disjoint"):
         """Split one movie, embed every chunk, and save the .npz + metadata."""
         video_path = Path(video_path)
         temp_dir = tempfile.mkdtemp() if not keep_chunks else output_dir
 
         print(f"Splitting video into {chunk_duration}s chunks...")
-        chunks = self.split_video_by_time(video_path, chunk_duration, temp_dir)
+        chunks = self.split_video_by_time(video_path, chunk_duration, temp_dir, mode=mode)
 
         print(f"Extracting embeddings from {len(chunks)} chunks...")
         results = []
@@ -155,6 +273,7 @@ class OmniEmbedExtractor:
             'video_path': str(video_path),
             'num_chunks': len(results),
             'chunk_duration': chunk_duration,
+            'chunk_mode': mode,
             'use_audio': use_audio,
             'model': EMBED_MODEL,
             'embedding_dim': EMBED_DIM,
@@ -208,6 +327,11 @@ def main():
                         help='Default: $SPACETOP_DIR/spacetop_embeddings_v2')
     parser.add_argument('--spacetop_dir', type=str, default=None)
     parser.add_argument('--chunk-duration', type=float, default=2.0)
+    parser.add_argument('--chunk-mode', type=str, default='disjoint',
+                        choices=['disjoint', 'prefix'],
+                        help="'disjoint' tiles the movie into non-overlapping clips. "
+                             "'prefix' reproduces the original run, where clip N was the "
+                             "movie's first 2(N+1) seconds.")
     parser.add_argument('--device', type=str, default='cuda:0')
     args = parser.parse_args()
 
@@ -218,7 +342,7 @@ def main():
     video_files = [video_files[i::args.num_groups] for i in range(args.num_groups)][args.group_index]
 
     print(f"Shard {args.group_index}/{args.num_groups}: {len(video_files)} videos "
-          f"from {video_dir} -> {output_base}")
+          f"from {video_dir} -> {output_base} [{args.chunk_mode} {args.chunk_duration}s]")
 
     extractor = OmniEmbedExtractor(model_name=EMBED_MODEL, device=args.device)
 
@@ -232,6 +356,7 @@ def main():
             extractor.process_video_chunks(
                 video_path=video_file,
                 chunk_duration=args.chunk_duration,
+                mode=args.chunk_mode,
                 use_audio=True,
                 output_dir=output_base,
                 keep_chunks=True,       # the clips are the input to every later step

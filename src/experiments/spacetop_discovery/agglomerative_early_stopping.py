@@ -218,11 +218,15 @@ def load_or_extract_sheets(model, processor, video_ids, output_dir, spacetop_dir
     todo = list(enumerate(video_ids))[shard::num_shards]
 
     kept_idx, kept_ids, kept_sheets = [], [], []
+    n_uncached = 0
     for pos, vid in tqdm(todo, desc=f"Cortical sheets [{shard + 1}/{num_shards}]"):
         video_id = os.path.basename(vid)
         cache = os.path.join(cortical_sheets_dir, f"{video_id}.npy")
         if os.path.exists(cache):
             sheet = np.load(cache)
+        elif model is None:      # --cached_only: never extract
+            n_uncached += 1
+            continue
         else:
             clip_path = resolve_clip(vid, spacetop_dir)
             if not os.path.exists(clip_path):
@@ -259,6 +263,8 @@ def load_or_extract_sheets(model, processor, video_ids, output_dir, spacetop_dir
         if num_shards == 1:
             kept_sheets.append(np.asarray(sheet, dtype=np.float32).reshape(-1))
 
+    if n_uncached:
+        print(f"--cached_only: skipped {n_uncached} clips with no cached sheet")
     sheets = np.stack(kept_sheets, axis=0) if kept_sheets else np.empty((0, 0), np.float32)
     return kept_idx, kept_ids, sheets
 
@@ -272,7 +278,9 @@ def cluster_with_early_stopping(embeddings, video_ids, sheets, score_fn):
         sheets:     ``(N, U)`` cortical sheets, one row per clip.
         score_fn:   ``(target, baseline) -> float`` over sheet matrices.
 
-    Returns a list of clusters, each a list of clip ids.
+    Returns ``(clusters, unassigned)``: a list of clusters, each a list of clip ids and
+    none smaller than ``score_fn.min_size``, and the clip ids that belong to no cluster
+    (see the ceiling case in ``split``).
     """
     n = len(video_ids)
     Z = linkage(embeddings, method='ward', metric='euclidean')
@@ -296,17 +304,41 @@ def cluster_with_early_stopping(embeddings, video_ids, sheets, score_fn):
         mask[leaves] = False
         return score_fn(sheets[leaves], sheets[mask])
 
+    unassigned = []
+
     def split(node_id):
         leaves = node_leaves[node_id]
-        parent_score = score(leaves)
 
-        if node_id < n:          # leaf: cannot split further
+        if node_id < n:          # leaf: cannot split further (only reachable if min_size <= 1)
             return [[video_ids[i] for i in leaves]]
 
         row = int(node_id - n)
         left_node, right_node = int(Z[row, 0]), int(Z[row, 1])
         left_leaves, right_leaves = node_leaves[left_node], node_leaves[right_node]
 
+        if len(leaves) > max_size:
+            # Above the ceiling nothing scores, so the walk has to descend. A child below
+            # the floor cannot be a cluster, so its clips are left unassigned instead of
+            # being recursed into -- every score down there is -inf too, and the old walk
+            # followed such a child all the way to single-clip "clusters".
+            out = []
+            for child, child_leaves in ((left_node, left_leaves), (right_node, right_leaves)):
+                if len(child_leaves) < min_size:
+                    unassigned.extend(video_ids[i] for i in child_leaves)
+                    print(f"Node {node_id}: {len(child_leaves)} clips left unassigned "
+                          f"(child below min_size={min_size})", flush=True)
+                else:
+                    out += split(child)
+            return out
+
+        # A split has to leave two clusters of at least min_size, else the node stays
+        # whole. Without this, a child below the floor scores -inf, always "loses" to its
+        # parent and was returned as a cluster in its own right -- which is how clusters
+        # of 4-8 clips got through a min_size of 10.
+        if len(left_leaves) < min_size or len(right_leaves) < min_size:
+            return [[video_ids[i] for i in leaves]]
+
+        parent_score = score(leaves)
         left_score = score(left_leaves)
         right_score = score(right_leaves)
 
@@ -322,7 +354,9 @@ def cluster_with_early_stopping(embeddings, video_ids, sheets, score_fn):
 
         return split(left_node) + split(right_node)
 
-    return split(2 * n - 2)
+    clusters = split(2 * n - 2)
+    assert all(len(c) >= min_size for c in clusters), "a cluster below min_size escaped"
+    return clusters, unassigned
 
 
 def main():
@@ -351,6 +385,12 @@ def main():
                              'Only meaningful with --extract_only.')
     parser.add_argument('--num_shards', type=int, default=1,
                         help='How many extraction workers share the sheet cache.')
+    parser.add_argument('--cached_only', action='store_true',
+                        help='cluster only the clips whose sheet is already in '
+                             '<output_dir>/cortical_sheets, and never load the model. For '
+                             're-cutting a tree over an existing sheet cache on a CPU pod; '
+                             'on the prefix clip set the uncached clips are the long ones '
+                             'no GPU could extract.')
     parser.add_argument('--extract_only', action='store_true',
                         help='extract the cortical sheets and stop (they are the slow, '
                              'GPU-bound part; the walk itself is CPU-only).')
@@ -389,7 +429,12 @@ def main():
         return
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model, processor = load_model_and_processor(model=args.checkpoint, device=device)
+    if args.cached_only:
+        if args.extract_only:
+            parser.error("--cached_only and --extract_only are contradictory")
+        model = processor = None
+    else:
+        model, processor = load_model_and_processor(model=args.checkpoint, device=device)
 
     if args.num_shards > 1 and not args.extract_only:
         parser.error("--num_shards > 1 only makes sense with --extract_only; the "
@@ -423,10 +468,17 @@ def main():
     print(f"Wrote {used_path} ({len(video_ids)} clips)")
 
     score_fn = make_cluster_score_fn(args.min_cluster, args.max_cluster)
-    tree = cluster_with_early_stopping(embeddings, video_ids, sheets, score_fn)
-    print(f"Number of clusters: {len(tree)}")
+    tree, unassigned = cluster_with_early_stopping(embeddings, video_ids, sheets, score_fn)
+    sizes = [len(c) for c in tree]
+    print(f"Number of clusters: {len(tree)} (sizes {min(sizes)}-{max(sizes)}); "
+          f"{len(unassigned)} clips unassigned")
     write_pickle(tree, linkage_path)
     print(f"Wrote {linkage_path}")
+    # Sidecar, always written: calculate_selectivity folds these clips into every
+    # cluster's baseline so its t-test compares against the same clips the walk did.
+    unassigned_path = linkage_path[:-len('.pkl')] + '_unassigned.json'
+    write_json(unassigned, unassigned_path)
+    print(f"Wrote {unassigned_path}")
 
 
 if __name__ == "__main__":
