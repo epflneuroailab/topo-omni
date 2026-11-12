@@ -188,11 +188,21 @@ def parallelize_feature_extraction(
     anatomical_constraint,
     W, H,
     baseline=False,
+    checkpoint=None,
+    overwrite=False,
+    save_batch_size=256,
+    start_batch=0,
+    end_batch=None,
 ):
 
-    save_batch_size = 256
-
-    model, processor = load_model(baseline=baseline)
+    # WITHOUT `checkpoint`, load_topo_omni falls back to $TOPO_OMNI_MODEL -- a different
+    # run -- while `model_name` only names the output directory, so the features land
+    # under the right name describing the wrong model. Same trap the selectivity runner
+    # documents; name the checkpoint explicitly.
+    model, processor = load_model(model=checkpoint, baseline=baseline)
+    # With baseline=True, resolve_model_id returns Qwen2.5-Omni-3B and IGNORES `checkpoint`,
+    # so printing the checkpoint there would name a model that was not loaded.
+    print(f"> Model: {'Qwen/Qwen2.5-Omni-3B (baseline, identity adaptors)' if baseline else (checkpoint or os.getenv('TOPO_OMNI_MODEL', '<default>'))}")
 
     hdf5_path = f"{STIMULI_DIR}/nsd_stimuli.hdf5"
 
@@ -218,25 +228,49 @@ def parallelize_feature_extraction(
     os.makedirs("tmp/nsd", exist_ok=True)
     os.makedirs(f"{SAVE_DIR}/{model_name}/nsd_features", exist_ok=True)
 
-    with h5py.File(hdf5_path, "r") as image_data:
-        num_images = len(image_data["imgBrick"])
-        num_save_batches = (num_images + save_batch_size - 1) // save_batch_size
-        img_brick = image_data["imgBrick"][:]
+    # `imgBrick` is (73000, 425, 425, 3) uint8 = 39.6 GiB. Reading it with [:] materialises
+    # the whole thing in RAM before the first forward pass, which needs a 40 GiB+ box and
+    # buys nothing: each save-batch touches 256 contiguous rows and never looks back. Keep
+    # the file open and slice per batch instead -- h5py reads only the requested rows.
+    image_file = h5py.File(hdf5_path, "r")
+    img_brick = image_file["imgBrick"]
+    num_images = img_brick.shape[0]
+    num_save_batches = (num_images + save_batch_size - 1) // save_batch_size
+
+    # Shard over save-batches so the 73,000 images can fan out to several single-GPU jobs.
+    # Each batch writes its own self-contained file and reads nothing from its neighbours,
+    # so disjoint ranges are safe to run concurrently. Ranges must be DISJOINT: the
+    # skip-if-exists check is not a lock, so two jobs given the same batch will both start
+    # it and race on the write.
+    lo = max(0, start_batch)
+    hi = num_save_batches if end_batch is None else min(end_batch, num_save_batches)
+    print(f"> Save-batches {lo}..{hi - 1} of {num_save_batches} "
+          f"({save_batch_size} images each, {num_images} total)")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as io_executor, \
          concurrent.futures.ThreadPoolExecutor(max_workers=len(top_k_pcts) * len(categories)) as cpu_executor:
 
-        for batch_idx in tqdm(range(num_save_batches)):
-
-            print(f"> Processing batch {batch_idx + 1}/{num_save_batches}...")
+        for batch_idx in tqdm(range(lo, hi)):
 
             start = batch_idx * save_batch_size
             num_files_in_batch = min(save_batch_size, num_images - start)
             save_path = f"{SAVE_DIR}/{model_name}/nsd_features/nsd_batch_idx={batch_idx}_anatomical={anatomical_constraint}.hdf5"
 
+            # Resumability: 286 batches over 73,000 images is hours of GPU time, and the
+            # loop had no way to pick up after a preemption. Each batch's output is
+            # self-contained, so a finished one can simply be skipped.
+            if os.path.exists(save_path) and not overwrite:
+                print(f"> Batch {batch_idx + 1}/{num_save_batches} already done, skipping.")
+                continue
+
+            print(f"> Processing batch {batch_idx + 1}/{num_save_batches}...")
+
+            # one contiguous read of this batch's rows, then hand the slices to the writers
+            batch_images = img_brick[start:start + num_files_in_batch]
+
             # --- Parallel image saving (I/O-bound) ---
             save_args = [
-                (img_brick[start + idx], f"tmp/nsd/tmp_{start + idx}.png")
+                (batch_images[idx], f"tmp/nsd/tmp_{start + idx}.png")
                 for idx in range(num_files_in_batch)
             ]
             image_paths = list(io_executor.map(save_image_worker, save_args))
@@ -267,34 +301,84 @@ def parallelize_feature_extraction(
 
             dump_hdf5(final_data, save_path)
 
+    image_file.close()
+
 if __name__ == "__main__":
 
-    categories = [
-        "faces",
-        "scenes",
-        "bodies",
-        "vwfa",
-        "objects",
-        "speech",
-    ]
+    import argparse
 
-    # Topographic model by default. For the non-topo control, set baseline=True below
-    # and model_name=BASELINE_TITLE (its precomputed selectivity stats live under that title).
-    model_name = MODEL_TITLE
-    baseline = False
+    parser = argparse.ArgumentParser(
+        description="Extract NSD cortical-sheet features for the brain-alignment analysis.")
+    parser.add_argument("--model_name", default=MODEL_TITLE,
+                        help="run title under $SAVE_DIR. Names BOTH the selectivity stats "
+                             "that define the unit masks and the nsd_features/ output dir.")
+    parser.add_argument("--checkpoint", default=None,
+                        help="checkpoint dir to extract with. WITHOUT this, load_topo_omni "
+                             "falls back to $TOPO_OMNI_MODEL -- possibly a different run -- "
+                             "while --model_name only sets the output path, so the features "
+                             "land under the right name describing the wrong model.")
+    parser.add_argument("--stats_fwhm_mm", default="3.0",
+                        help="the FWHM tag in the selectivity-stats filename, i.e. "
+                             "<cat>/<cat>_fwhm<F>_selectivity_stats.pkl. Pass 'none' for the "
+                             "older unsuffixed <cat>_all_selectivity_stats.pkl layout.")
+    parser.add_argument("--categories",
+                        default="faces,scenes,bodies,vwfa,objects,speech",
+                        help="comma-separated localizers whose masks to read out.")
+    parser.add_argument("--top_k_pcts", default="1,5,10",
+                        help="comma-separated top-k%% levels; the paper reports top-10%%.")
+    parser.add_argument("--anatomical_constraint", action="store_true",
+                        help="restrict each mask to its modality band. NOTE the band cuts "
+                             "in get_selectivity_mask are still the hardcoded 144/256 "
+                             "literals of the 309x512 strip sheet and are WRONG for any "
+                             "other layout -- leave this off until they read from SHEET.")
+    parser.add_argument("--p_value_threshold", type=float, default=0.001)
+    parser.add_argument("--save_batch_size", type=int, default=256)
+    parser.add_argument("--start_batch", type=int, default=0,
+                        help="first save-batch index to process (inclusive).")
+    parser.add_argument("--end_batch", type=int, default=None,
+                        help="one past the last save-batch index. With --start_batch this "
+                             "shards the run across jobs; keep the ranges DISJOINT, the "
+                             "skip-if-exists check is not a lock.")
+    parser.add_argument("--baseline", action="store_true",
+                        help="extract with the untrained Qwen2.5-Omni-3B control instead.")
+    parser.add_argument("--overwrite", action="store_true",
+                        help="redo save-batches whose output file already exists. Default "
+                             "is to skip them, so an interrupted run resumes.")
+
+    args = parser.parse_args()
+
+    categories = [c.strip() for c in args.categories.split(",") if c.strip()]
+    top_k_pcts = [int(x) for x in args.top_k_pcts.split(",") if x.strip()]
+
+    model_name = args.model_name
+    baseline = args.baseline
     dirpath = f"{SAVE_DIR}/{model_name}"
 
-    anatomical_constraint = False
+    anatomical_constraint = args.anatomical_constraint
     H, W = SHEET.n_row, SHEET.n_col
-    p_value_threshold = 0.001
-    top_k_pcts = [1, 5, 10]
+    p_value_threshold = args.p_value_threshold
+
+    print(f"> Sheet: {SHEET.n_row}x{SHEET.n_col} "
+          f"(TOPO_SHEET_LAYOUT={os.getenv('TOPO_SHEET_LAYOUT', 'strip')})")
 
     selectivity = {}
     for top_k_pct in top_k_pcts:
         selectivity[top_k_pct] = {}
         for category in categories:
-     
-            selectivity_path = f"{dirpath}/{category}/{category}_all_selectivity_stats.pkl"
+
+            # The `_all_` form below is the ORIGINAL hardcoded path and matches nothing the
+            # current selectivity runner writes -- it emits
+            # <cat>_fwhm<F>_selectivity_stats.pkl. Keep both so old result trees still load.
+            if str(args.stats_fwhm_mm).lower() == "none":
+                selectivity_path = f"{dirpath}/{category}/{category}_all_selectivity_stats.pkl"
+            else:
+                selectivity_path = (f"{dirpath}/{category}/"
+                                    f"{category}_fwhm{args.stats_fwhm_mm}_selectivity_stats.pkl")
+            if not os.path.exists(selectivity_path):
+                raise SystemExit(
+                    f"no selectivity stats at {selectivity_path}. Run the selectivity "
+                    f"sweep for '{category}' on {model_name} first, or pass a different "
+                    f"--stats_fwhm_mm.")
 
             selectivity[top_k_pct][category] = get_selectivity_mask(
                 stats=read_pickle(selectivity_path),
@@ -303,6 +387,8 @@ if __name__ == "__main__":
                 p_value_threshold=p_value_threshold,
                 top_k_pct=top_k_pct,
             )
+            print(f"> mask {category} top-{top_k_pct}%: "
+                  f"{int(selectivity[top_k_pct][category].sum())} units")
 
     parallelize_feature_extraction(
         model_name=model_name,
@@ -313,16 +399,9 @@ if __name__ == "__main__":
         W=W,
         H=H,
         baseline=baseline,
+        checkpoint=args.checkpoint,
+        overwrite=args.overwrite,
+        save_batch_size=args.save_batch_size,
+        start_batch=args.start_batch,
+        end_batch=args.end_batch,
     )
-
-
-
-        
-        
-
-   
-
-
-      
-
-
