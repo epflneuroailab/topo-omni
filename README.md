@@ -56,7 +56,9 @@ topo-omni/
 │   │   ├── accelerate.yml        # Accelerate/DeepSpeed launcher config
 │   │   ├── init/                 # Cortical coordinate initialization (coords*.yml)
 │   │   ├── train/                # Training configs (base.yml, tiled32_4608.yml, ...)
-│   │   └── eval/                 # Eval configs (retinotopy.yml, tonotopy.yml, marvi.yml, ...)
+│   │   ├── eval/                 # Eval configs (retinotopy.yml, tonotopy.yml, marvi.yml, ...)
+│   │   └── experiments/          # One-off variants of the above, one per evaluation actually
+│   │                             # run (per checkpoint, fwhm, layout or control); same init/train/eval split
 │   ├── experiments/              # ONE FOLDER PER EXPERIMENT — each holds the whole chain
 │   │   │                         # (extract → run → analyse → plot) for that phenomenon.
 │   │   ├── orientation/          # Orientation maps, pinwheels, column spacing (Lambda)
@@ -68,6 +70,7 @@ topo-omni/
 │   │   │   ├── pinwheel_scan.py  #   scan slot ranges for pinwheel excess
 │   │   │   ├── plot_panel.py     #   paper panel: smoothed orientation map
 │   │   │   ├── plot_tiled.py     #   per-slot maps for a tiled sheet
+│   │   │   ├── plot_map_sf_color.py  # spatial-frequency and colour preference maps
 │   │   │   ├── plot_density_bars.py
 │   │   │   ├── smoothness_panels.py, smoothness_window_scan.py
 │   │   │   ├── tangential_ratio.py, nn_delta.py, deep_band_continuous.py
@@ -83,11 +86,14 @@ topo-omni/
 │   │   ├── selectivity/          # Category selectivity over the sheet
 │   │   │   ├── extract_features.py  # model responses to localizer stimuli
 │   │   │   ├── run.py            #   ON vs OFF t-contrast, FDR-corrected
-│   │   │   ├── plot.py           #   in-silico selectivity sheet
+│   │   │   ├── plot.py           #   in-silico selectivity sheet (all localizers)
+│   │   │   ├── plot_category.py  #   one localizer's t-map with its top islands
+│   │   │   ├── island_null.py    #   depth-corrected island scores (label-permutation null)
 │   │   │   └── topo_nontopo.py, topo_nontopo_clustering.py  # topo vs non-topo controls
 │   │   ├── response_profiles/    # Per-category response bars (model vs fMRI localizers)
 │   │   │   ├── cognitive.py, marvi.py           # compute profiles
-│   │   │   └── plot.py, plot_cognitive.py, plot_pernet.py
+│   │   │   ├── plot.py, plot_cognitive.py, plot_pernet.py
+│   │   │   └── plot_fmri.py      #   the human ROI profiles, in the same style
 │   │   ├── ablation/             # Causal tests: ablation + stimulation
 │   │   │   ├── run.py            #   ablate a sheet region, measure behaviour
 │   │   │   ├── plot.py, plot_barplot.py
@@ -103,8 +109,17 @@ topo-omni/
 │   │   │   ├── extract_video_embeddings.py, compile_embeddings.py   # per-clip embeddings
 │   │   │   ├── agglomerative_early_stopping.py, merge_clusters.py,  # cluster
 │   │   │   │   plot_dendrogram.py
-│   │   │   └── create_cluster_manifest.py, calculate_selectivity.py, # label + inspect
-│   │   │       plot_model_selectivity.py, make_cluster_collages.py
+│   │   │   ├── create_cluster_manifest.py, calculate_selectivity.py, # label + inspect
+│   │   │   │   plot_model_selectivity.py, make_cluster_collages.py,
+│   │   │   │   sample_cluster_frames.py
+│   │   │   ├── residualize_movie.py, modality_sheets.py       # controls: movie identity, input stream
+│   │   │   │                     # after discovery (see "Cluster discovery" below):
+│   │   │   ├── cluster_maps.py, cluster_null.py               # cluster maps + depth-corrected null
+│   │   │   ├── cluster_fingerprint.py, cluster_roi_mean_t.py  # cluster vs localizer regions (model)
+│   │   │   ├── brain_fingerprint.py, brain_roi_mean_t.py,     # cluster vs EMFL ROIs (fMRI)
+│   │   │   │   brain_roi_subject_test.py, brain_global_removed_group.py,
+│   │   │   │   cluster_surface_report.py
+│   │   │   └── model_brain_roi_mean_t.py, model_brain_roi_mean_t_subject.py  # model vs brain
 │   │   └── brain_alignment/      # Encoding-model alignment to human fMRI
 │   │       ├── plot_barplot.py
 │   │       └── table.py, table_stats.py
@@ -129,6 +144,11 @@ topo-omni/
 │   ├── submit_topoomni_ablation.sh
 │   ├── submit_topoomni_spacetop_discovery.sh
 │   ├── submit_topoomni_stimulation.sh
+│   ├── submit_taskonly_training.sh     # matched task-only control (tiled32; 4x H200)
+│   ├── submit_taskonly_selectivity.sh  # selectivity maps of that control
+│   ├── submit_baseline_selectivity.sh  # selectivity maps of the untrained Qwen2.5-Omni-3B
+│   ├── submit_early_topography.sh      # retinotopy + orientation on the tiled32 run
+│   ├── submit_nsd_features.sh          # NSD feature extraction, sharded over GPUs
 │   └── figures/                  # Scripts that reproduce individual paper figures
 ├── data/                         # Small tracked artifacts (summary CSVs, figures);
 │                                 # large stimuli/checkpoints/datasets are gitignored
@@ -201,6 +221,23 @@ The cortical sheet is a **304 × 512** 2-D grid that spans the entire model:
 | 160 – 303 | Thinker (LM) layers |
 
 Each unit (neuron) has a fixed coordinate on this grid. The spatial loss computes pairwise response similarity within local Chebyshev-distance neighborhoods and penalizes dissimilarity between neighbors. The loss weight `alpha` (default: 20) controls how strongly the spatial constraint is applied relative to the task loss.
+
+### The tiled32 sheet (`topo-omni-tiled32-4608`)
+
+The revised analyses use a second layout, selected with `TOPO_SHEET_LAYOUT=tiled32`: an
+**800 × 576** sheet (460,800 units) on which every layer is its own tile of 4,608 units
+(`cortical_dim: 4608`), 32 tiles per encoder and 36 for the thinker, laid out in serpentine
+order so that consecutive layers stay adjacent. It has no front-end (conv / patch-embed)
+slot, and its spatial loss has two terms, a fine one at a constant radius and a coarse one
+whose radius grows with encoder depth (`tiled32_4608.yml`).
+
+**`TOPO_SHEET_LAYOUT` must match the checkpoint for every script that loads it, inference
+included.** The layout is read at import time. Loading a tiled32 checkpoint without it builds
+the strip layout's front-end adaptors, which are absent from the checkpoint and are applied at
+random initialization. The only sign is Hugging Face's "newly initialized" warning; treat it as
+a failure. Scripts that place units on the sheet also need the coordinates the run was trained
+with (`stats.coords_path` in the eval configs under `src/configs/experiments/eval/`), and stop
+if their unit count disagrees with the layout.
 
 ---
 
@@ -323,6 +360,13 @@ Key config options (`configs/train/base.yml`):
 
 Training logs to Weights & Biases when `--wandb` is passed.
 
+**Task-only control.** `scripts/submit_taskonly_training.sh` trains
+`topo-omni-tiled32-4608-taskonly`, whose config differs from the topographic run only by
+`apply-spatial-loss: false`. It resumes automatically from the highest `checkpoint-*` in the
+run directory. To match the topographic run's effective batch (3 × 5 × 4 = 60) it needs exactly
+4 GPUs with at least 140 GiB each (H200). Do not schedule it on B300: the container's
+nvrtc cannot compile for Blackwell, and runai reports that crash as *Succeeded*.
+
 ### 3. Run selectivity evaluation
 
 Tests whether specific regions on the cortical sheet are selective for a category (faces, bodies, objects, scenes, speech, etc.) versus control stimuli.
@@ -346,6 +390,38 @@ Key config options (`src/configs/eval/marvi.yml`):
 | `stats.smooth` | Apply Gaussian smoothing before testing |
 | `stats.fwhm_mm` | Smoothing kernel FWHM (mm) |
 
+`scripts/run_selectivity.py` runs the whole localizer sweep for one run. `--checkpoint`
+selects the weights (default: the highest-numbered `checkpoint-*` in the run directory);
+`--model_name` names both the run directory and the output directory.
+
+```bash
+TOPO_SHEET_LAYOUT=tiled32 python scripts/run_selectivity.py \
+    --model_name topo-omni-tiled32-4608 --checkpoint checkpoint-730 --fwhm 3.0
+
+# the untrained Qwen2.5-Omni-3B with identity adaptors, on the same sheet geometry
+TOPO_SHEET_LAYOUT=tiled32 python scripts/run_selectivity.py \
+    --baseline --config_from topo-omni-tiled32-4608 --model_name qwen-omni-base-tiled32 --fwhm 3.0
+```
+
+The sweep includes the verbs-versus-nouns negative control of Moseley & Pulvermüller (2014)
+(`moseley_{concrete,abstract}_{verbs,nouns}`). `submit_taskonly_selectivity.sh` and
+`submit_baseline_selectivity.sh` submit one runai job per localizer for the two controls.
+
+**Choosing which islands to draw.** Deeper layers have a larger spatial-loss radius, so their
+islands are large whatever the contrast. `selectivity/island_null.py` shuffles each localizer's
+ON/OFF labels, records the chance-island size in every tile, and scores each observed island
+by its depth-corrected mass, (size / chance size at that depth) × mean t, with a family-wise
+p-value. `plot.py` and `plot_category.py` then rank islands by it with
+`--island-rank corrected`:
+
+```bash
+python -m src.experiments.selectivity.island_null \
+    --results-dir results/topo-omni-tiled32-4608 --stats-suffix _fwhm3.0 --coords <training coords.npy>
+python -m src.experiments.selectivity.plot_category --results-dir results/topo-omni-tiled32-4608 \
+    --category faces --stats-suffix _fwhm3.0 --top-k-pct 10 --n-islands 3 --island-rank corrected \
+    --island-scores results/topo-omni-tiled32-4608/faces/faces_fwhm3.0_island_null.json
+```
+
 ### 4. Ablation and stimulation
 
 Ablates (zeros out) or stimulates (amplifies) a localizer-defined region and measures the effect on downstream responses.
@@ -360,11 +436,24 @@ Extract model activations for NSD (images) or SpaceTop (videos) fMRI datasets, t
 
 ```bash
 # NSD
-python -m src.experiments.selectivity.extract_features
+python -m src.experiments.selectivity.extract_features \
+    --model_name topo-omni-tiled32-4608 --checkpoint artifacts/ckpts/topo-omni-tiled32-4608
 
 # SpaceTop
 python -m src.experiments.spacetop_discovery.extract --group-index 0
 ```
+
+For NSD, the unit masks come from the run's own selectivity stats
+(`<model_name>/<cat>/<cat>_fwhm3.0_selectivity_stats.pkl`; `--stats_fwhm_mm none` reads the
+older `_all_` files), so the selectivity sweep has to exist first. Pass `--checkpoint`: without
+it the model falls back to `$TOPO_OMNI_MODEL` while `--model_name` still names the output, so
+features of one run would be saved under another's name. `--baseline` extracts with the
+untrained Qwen2.5-Omni-3B instead.
+
+The 73,000 images are written in 286 self-contained batches of 256. A rerun skips batches
+already on disk, and `--start_batch` / `--end_batch` split the work across jobs;
+`scripts/submit_nsd_features.sh` does that over `NUM_SHARDS` GPUs (default 8). Keep the
+ranges disjoint, because the skip check is not a lock.
 
 Run correlation analysis:
 
@@ -384,6 +473,12 @@ bash scripts/pernet_response_profiles.sh [top_k_pct] [fwhm_mm] [anatomical_const
 
 These call into `experiments/response_profiles/marvi.py` / `experiments/response_profiles/cognitive.py` and plot via `experiments/response_profiles/plot.py`, `experiments/response_profiles/plot_cognitive.py`, and `experiments/response_profiles/plot_pernet.py`.
 
+`experiments/response_profiles/plot_fmri.py` draws the matching human profiles from the
+Marvi ROI summary CSV (group mean ± SEM across subjects). It imports the palette and condition
+order from `plot.py`, so the model and brain panels cannot drift apart. All figure scripts share
+one muted, two-family palette (warm for the five visual categories, cool for the auditory and
+text ones), defined in `selectivity/plot.py`.
+
 ### 7. Retinotopy and tonotopy mapping
 
 Map preferred visual-field position (eccentricity / polar angle) and preferred sound frequency across the cortical sheet, masking units that fail an ANOVA tuning test (FDR-corrected). The stimulus banks **self-generate** (no data download), which makes these panels fully reproducible on the raw path with only a GPU:
@@ -398,13 +493,26 @@ python -m src.experiments.retinotopy.run --config src/configs/eval/retinotopy.ym
 python -m src.experiments.tonotopy.run   --config src/configs/eval/tonotopy.yml     # preferred frequency
 ```
 
-(The single-axis variants `run_retinotopy_ecc` / `run_retinotopy_angle` expect `eccentricity/` and `angle/` sub-banks instead of the combined `retino_bank`.)
+(The single-axis variants `retinotopy/run_ecc.py` / `retinotopy/run_angle.py` expect `eccentricity/` and `angle/` sub-banks instead of the combined `retino_bank`.)
 
-The same masked-map treatment is available for **orientation preference**, using the TDANN orientation-bias sine-grating bank (510 full-field gratings: 8 orientations x 8 spatial frequencies x 5 phases x {bw, rg}). That bank is not self-generating, but it is public, so the script downloads it from OSF on first run — no manual staging:
+All three retinotopy scripts take the unit coordinates (`stats.coords_path`) and the smoothing
+(`stats.fwhm_mm`) from the config. They stop if the coordinates do not match the active sheet
+layout, and they crop to the vision encoder of that layout. For the tiled32 run use
+`src/configs/experiments/eval/retinotopy_tiled32_ckpt730.yml`;
+`scripts/submit_early_topography.sh` submits the angle, eccentricity and orientation jobs for it.
+
+The same masked-map treatment is available for **orientation preference**, using one of TDANN's two public sine-grating banks, selected with `data.bank`: `ori_bias` (the default; cardinal orientations oversampled) or `unbiased` (TDANN's published set: 8 orientations × 8 spatial frequencies × 5 phases × {bw, rg} = 640 full-field gratings), which the tiled32 configs use. Neither bank is self-generating, but both are public, so the script downloads the chosen one from OSF on first run — no manual staging:
 
 ```bash
 python -m src.experiments.orientation.run --config src/configs/eval/orientation.yml
 ```
+
+> **Known issue:** the OSF folder listing is paginated and not stably ordered. A file can
+> appear on two pages while another is never listed, and the downloader removes duplicates
+> without checking the total, so it can finish a file or two short without an error.
+> The existing local copies hold 638 of the 640 unbiased gratings and 510 of the 511
+> orientation-bias ones. Compare the count in `manifest.csv` with OSF's total before relying
+> on a fresh download.
 
 It writes a preferred-orientation map (cyclic colormap), an orientation-selectivity-index (OSI) map, a scatter over the whole sheet, and a histogram of preferred orientations against the bank's own orientation distribution. Each unit's opacity encodes how strongly it is tuned, so marginal units fade into the background instead of being shown or hidden by a flat pass/fail mask.
 
@@ -432,6 +540,14 @@ this per model, we estimate it), **pinwheel density** in pinwheels per `Λ²` (w
 over the smoothed map, then connected-component counting — dimensionless, so comparable to
 TDANN's ~2.1 and macaque V1's ~3.0), and **map smoothness** (`(max - first) / max` of the
 Δ-preferred-orientation-vs-distance curve).
+
+The smoothness panels for orientation, spatial frequency and colour (Δ preference against
+distance, and smoothness bars for Topo-Omni, its controls, TDANN and macaque V1) come from
+`orientation/smoothness_panels.py`. `--bar-models` and `--line-models` choose which models are
+drawn, while the saved statistics always cover all of them. `orientation/plot_map_sf_color.py`
+draws the sheet maps of preferred spatial frequency and colour that go with `plot_panel.py`'s
+orientation map. `plot_panel.py --no-counts` and `plot_tiled.py --no-counts` keep the pinwheel
+markers but leave the counts out of the figure.
 
 Two caveats it prints and you should not skip:
 
@@ -512,12 +628,47 @@ bash scripts/run_iou.sh
 | Orientation map structure | `experiments/orientation/metrics.py` | Circular variance, column spacing, pinwheel density, map smoothness (TDANN Fig. 2 metrics) |
 | Orientation map vs. macaque | `experiments/orientation/reference.py` | KS of circular variance against Ringach 2002 macaque V1 (n=308) |
 | Macaque reference map | `experiments/orientation/macaque_map.py` | Reconstructs TDANN's macaque orientation map to overlay its Δorientation-vs-distance curve |
+| Feature-map smoothness | `experiments/orientation/smoothness_panels.py` | Δ preference vs distance and smoothness for orientation, spatial frequency and colour, against TDANN and macaque V1 |
+| Depth-corrected island score | `experiments/selectivity/island_null.py`, `experiments/spacetop_discovery/cluster_null.py` | Island size relative to chance islands in the same layer, × mean t; family-wise p from a permutation null |
+| Cluster vs localizer regions | `experiments/spacetop_discovery/cluster_roi_mean_t.py`, `cluster_fingerprint.py` | Mean cluster t (or spatial r) in each localizer region of the model sheet |
+| Cluster vs human ROIs | `experiments/spacetop_discovery/brain_roi_subject_test.py`, `model_brain_roi_mean_t_subject.py` | Subject-level tests of cluster responses in the EMFL ROIs, and model–brain correlation across clusters |
 
 ---
 
 ## Cluster discovery
 
 `src/experiments/spacetop_discovery/` runs an unsupervised pipeline to find functionally selective clusters from video-driven activations: extract per-clip embeddings (`extract_video_embeddings.py`, `compile_embeddings.py`), agglomeratively cluster them (`agglomerative_early_stopping.py`, `plot_dendrogram.py`, `merge_clusters.py`), then label and inspect the resulting clusters (`create_cluster_manifest.py`, `calculate_selectivity.py`, `plot_model_selectivity.py`, `make_cluster_collages.py`).
+
+**Clips.** `extract_video_embeddings.py` now cuts each movie into non-overlapping 2 s clips by
+default (`--chunk-mode disjoint`). The original run's clips were cumulative prefixes of the movie
+(clip *N* = its first 2(*N*+1) s), so consecutive clips overlapped almost entirely and the tree
+grouped clips by movie; `--chunk-mode prefix` reproduces that run. `--run_tag` keeps runs of the
+same checkpoint over different clip sets in separate output directories
+(`spacetop_discovery_<tag>`). `residualize_movie.py` regresses movie identity out of the
+embeddings before clustering, and its docstring states what that also removes.
+
+**Tree walk.** `agglomerative_early_stopping.py` keeps every cluster within
+`[--min_cluster, --max_cluster]`. Clips that fit in no cluster are written to an
+`*_unassigned.json` sidecar, and `calculate_selectivity.py` adds them to every cluster's baseline,
+so each cluster is scored against the same clips as during the walk. `--cached_only` re-cuts a
+tree from the cached sheets on a CPU node without loading the model.
+
+**After discovery.** The model-side steps read the cached per-clip sheets, and only
+`modality_sheets.py` loads the model. The brain-side steps read the subject- and group-level
+cluster contrasts on fsaverage6 and the EMFL ROI masks.
+
+| Step | Script |
+|------|--------|
+| Cluster-vs-rest map on the sheet, drawn with `selectivity/plot_category.py --modality all` | `cluster_maps.py` |
+| Depth-corrected island scores for those maps (block permutation of clips) | `cluster_null.py` |
+| The same maps from the frames alone or the soundtrack alone | `modality_sheets.py` |
+| Representative frames for a figure panel | `sample_cluster_frames.py` |
+| Cluster response in each localizer region of the sheet | `cluster_roi_mean_t.py`, `cluster_fingerprint.py` |
+| Cluster response in each EMFL ROI of the SpaceTop fMRI data | `brain_roi_subject_test.py`, `brain_roi_mean_t.py`, `brain_fingerprint.py` |
+| Group maps with each subject's whole-cortex mean removed; anatomy of the surviving vertices | `brain_global_removed_group.py`, `cluster_surface_report.py` |
+| Model vs brain, correlated across clusters (group and subject level) | `model_brain_roi_mean_t.py`, `model_brain_roi_mean_t_subject.py` |
+
+Each script's docstring gives its command line.
 
 ---
 
