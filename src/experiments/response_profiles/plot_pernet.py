@@ -200,7 +200,9 @@ if __name__ == "__main__":
     baseline = _v.min() - 0.1 * (_v.max() - _v.min())  # slightly above the minimum for better visualization
 
     sns.set_theme(context="paper", font_scale=2, style="whitegrid")
-    fig, ax = plt.subplots(figsize=(8, 4))
+    # 4x4, the size of the other two-bar panels (plot_cognitive.py, plot_fmri.py). The old
+    # (8, 4) was the ten-condition canvas, which stretched two bars across the whole width.
+    fig, ax = plt.subplots(figsize=(4, 4))
 
     ax.bar(
         range(len(condition_order)),

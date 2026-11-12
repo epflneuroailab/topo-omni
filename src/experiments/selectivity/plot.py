@@ -70,29 +70,28 @@ conditions_labels = [
 # -----------------------------
 # Color palettes
 # -----------------------------
-# Warm = the five VISION categories, cool = audio/language. Keeping those two families
-# separate is what makes the vision/non-vision split readable, so replacements stay warm.
+# The paper's original muted two-family palette -- warm = the 5 VISION categories, cool =
+# the 5 audio/text ones -- re-spaced so every pair that actually meets can be told apart.
+# The original was #E64B35 #F39B2F #F1C232 #EFC94C #D4AC0D | #5AB4AC #4C9F9B #3F8F9C
+# #3B5B92 #2F3E75, and the published bars went through sns.barplot's saturation=0.75.
+# As rendered, Scenes/Objects was dE2000 = 2.8 (indistinguishable), FB/FP 6.4, FP/NW 7.1,
+# Scenes/Words 7.5 and Speech/MD 8.7; below ~10 two fills read as one colour.
 #
-# Scenes/Objects/Words used to be #F1C232 / #EFC94C / #D4AC0D -- three golds. Scenes vs
-# Objects was dE2000 = 3.0 and Scenes vs Words 6.3; below ~10 two fills read as the same
-# colour, so the panel showed one gold blob where three categories overlap. Objects moved
-# to sienna and Words to a deep gold, which takes the closest warm pair from 3.0 to 15.1
-# and Scenes/Objects specifically to 40.0, while every warm colour stays >=38 from the
-# whole cool block. Faces/Bodies/Scenes are unchanged so the figure still reads as before.
-# Three families, one per anatomical band, because that is what the panel actually shows:
-#   warm   -> the 5 VISION categories   (encoder band, left half)
-#   teal/blue -> the 2 AUDIO categories (encoder band, right half)
-#   purple -> the 3 TEXT categories     (thinker band)
-# The slot order below is conditions_labels order, and the `selectivity` list maps those
-# slots to categories: "False Belief"->theory_of_mind_text, "False Photo"->vocals,
-# "Nonwords"->language_text, "Quilted Speech"->speech, "Math"->multiple_demand_text. So
-# slots 5/7/9 are the TEXT ones and 6/8 the AUDIO ones -- they interleave, which is why
-# the old single cool ramp put text and audio colours right next to each other:
-# ToM vs vocals was dE2000 = 6.4 and vocals vs language 8.7, i.e. indistinguishable
-# across two different bands. Splitting the families takes the worst cross-family pair
-# from 6.4 to 25.1, and no pair anywhere in the 10 is now closer than 15.1.
-colors = ["#E64B35", "#F39B2F", "#F1C232", "#A0522D", "#9C6B00",
-     "#9B4FC4", "#3FAFA6", "#5B2D8E", "#2A6BB8", "#DE6FB8"]
+# Each colour keeps its hue (terracotta, ochre, mustard, khaki, olive | sage, teal, steel,
+# slate, navy) and chroma stays roughly uniform within a family, so the palette still
+# reads as the original; the separation comes from LIGHTNESS. Over the pairs that meet --
+# all 5 vision categories (they overlap at the top of the vision encoder), speech/vocals,
+# language/ToM/MD in the thinker, neighbouring profile bars and the two-bar cognitive
+# contrasts -- the worst pair is now dE2000 = 11.1 (FB/FP).
+#
+# These are the final fills: nothing downstream desaturates them (the old palette relied
+# on sns.barplot doing so), and the same ten values in the same order are the condition
+# colours in response_profiles/plot.py and plot_cognitive.py. Slot order is
+# conditions_labels order; `selectivity` below maps slots to categories: "False Belief" ->
+# theory_of_mind_text, "False Photo" -> vocals, "Nonwords" -> language_text,
+# "Quilted Speech" -> speech, "Math" -> multiple_demand_text.
+colors = ["#A04D3B", "#BF8649", "#CDB34C", "#E7DFA1", "#877C26",
+     "#92CBC3", "#61A6A4", "#478190", "#485682", "#303557"]
 
 CLUSTER_NAMES = {
     "faces": "Faces", "bodies": "Bodies", "scenes": "Scenes", "objects": "Objects",

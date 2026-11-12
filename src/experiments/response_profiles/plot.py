@@ -64,27 +64,19 @@ conditions_labels = [
 # Color palettes
 # -----------------------------
 palette_left = sns.color_palette(
-    # The 5 VISUAL conditions. Identical to the vision family in
-    # selectivity/plot.py, so faces/bodies/scenes/objects/words carry the same colour
-    # whether they appear as a localizer on the map or as a condition here.
-    # Scenes/Objects/Words were #F1C232/#EFC94C/#D4AC0D -- three golds, with
-    # Scenes vs Objects at dE2000 = 3.0 (indistinguishable).
-    ["#E64B35", "#F39B2F", "#F1C232", "#A0522D", "#9C6B00"]
+    # The 5 VISUAL conditions. Identical to the vision family in selectivity/plot.py, so
+    # faces/bodies/scenes/objects/words carry the same colour whether they appear as a
+    # localizer on the map or as a condition here. See the palette note there for how the
+    # original muted palette was re-spaced (Scenes/Objects was dE2000 = 2.8).
+    ["#A04D3B", "#BF8649", "#CDB34C", "#E7DFA1", "#877C26"]
 )
 
 palette_right = sns.color_palette(
-    # The 5 NON-VISUAL conditions, re-spaced across teal -> blue -> violet. FB/FP were
-    # dE2000 = 6.4 apart and FP/NW 8.7 -- the same collision the map had.
-    #
-    # NOT a 1:1 copy of the map's cool colours, deliberately. There the slots hold
-    # unrelated categories from different bands (slot 5 = theory_of_mind, slot 6 =
-    # vocals), so they were split into a purple text family and a teal audio family.
-    # Here slots 5 and 6 are False Belief and False Photo -- two ToM conditions that
-    # blend_colors() AVERAGES into the single "FB+FP" bar. Purple + teal averages to
-    # #6d7fb5, a desaturated mud. Keeping FB/FP as two distinguishable teals blends to
-    # #40a08c instead, and keeps the whole right block cool so the visual /
-    # non-visual divider still reads.
-    ["#66C2A5", "#1B7F72", "#4A9BD1", "#2A4B8D", "#7B4FA8"]
+    # The 5 NON-VISUAL conditions: one sage -> teal -> steel -> slate -> navy ramp, the
+    # same values as the map's cool slots. FB and FP are adjacent on it, so
+    # blend_colors() averages them into a teal that stays inside the family for the
+    # combined "FB+FP" bar.
+    ["#92CBC3", "#61A6A4", "#478190", "#485682", "#303557"]
 )
 
 palette = dict(zip(conditions, palette_left + palette_right))

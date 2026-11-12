@@ -53,13 +53,13 @@ a = ap.parse_args()
 H, W = S.n_row, S.n_col
 THK, MID = S.thinker_rows, S.n_col // 2
 eth, etw, _, enc_n = S.enc_tile
-CATS = [("faces", "vision", "#E64B35", "Faces"), ("bodies", "vision", "#F39B2F", "Bodies"),
-        ("scenes", "vision", "#F1C232", "Scenes"), ("objects", "vision", "#EFC94C", "Objects"),
-        ("vwfa", "vision", "#D4AC0D", "Words"), ("speech", "audio", "#3B5B92", "Speech"),
-        ("vocals", "audio", "#4C9F9B", "Vocals"),
-        ("theory_of_mind_text_ALL", "cognitive", "#5AB4AC", "Theory of Mind"),
-        ("language_text_ALL", "language", "#3F8F9C", "Language"),
-        ("multiple_demand_text_ALL", "cognitive", "#2F3E75", "Multiple Demand")]
+CATS = [("faces", "vision", "#A04D3B", "Faces"), ("bodies", "vision", "#BF8649", "Bodies"),
+        ("scenes", "vision", "#CDB34C", "Scenes"), ("objects", "vision", "#E7DFA1", "Objects"),
+        ("vwfa", "vision", "#877C26", "Words"), ("speech", "audio", "#485682", "Speech"),
+        ("vocals", "audio", "#61A6A4", "Vocals"),
+        ("theory_of_mind_text_ALL", "cognitive", "#92CBC3", "Theory of Mind"),
+        ("language_text_ALL", "language", "#478190", "Language"),
+        ("multiple_demand_text_ALL", "cognitive", "#303557", "Multiple Demand")]
 
 def place(flat):
     return np.rot90(np.asarray(flat, float).reshape(W, H), k=1)

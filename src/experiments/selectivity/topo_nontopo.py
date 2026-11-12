@@ -121,8 +121,9 @@ def retrieve_t_map(filepath,
 # -----------------------------
 # Color palettes
 # -----------------------------
-colors = ["#E64B35", "#F39B2F", "#F1C232", "#EFC94C", "#D4AC0D",
-     "#5AB4AC", "#4C9F9B", "#3F8F9C", "#3B5B92", "#2F3E75"]
+# Same values as selectivity/plot.py -- see the palette note there.
+colors = ["#A04D3B", "#BF8649", "#CDB34C", "#E7DFA1", "#877C26",
+     "#92CBC3", "#61A6A4", "#478190", "#485682", "#303557"]
 
 cmaps = {label: mcolors.LinearSegmentedColormap.from_list("custom", [color, "#E7E7E7"]) for color, label in zip(colors, conditions_labels)}
 

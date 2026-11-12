@@ -17,15 +17,16 @@ def read_json(file_path):
     return data
 
 category_to_color = {
-    "faces": "#E64B35",
-    "bodies": "#F39B2F",
-    "scenes": "#F1C232",
-    "objects": "#A0522D",
+    "faces": "#A04D3B",
+    "bodies": "#BF8649",
+    "scenes": "#CDB34C",
+    "objects": "#E7DFA1",
 }
 
-# Matches selectivity/plot.py and response_profiles/*. Objects was #EFC94C, dE2000 = 3.0
-# from the Scenes gold beside it -- the two bars read as one colour.
-color_palette = sns.color_palette(["#E64B35", "#F39B2F", "#F1C232", "#A0522D"])
+# Matches selectivity/plot.py and response_profiles/*. Drawn with saturation=1 below:
+# sns.barplot's default 0.75 would desaturate an already-muted palette and the bars
+# would no longer match the map.
+color_palette = sns.color_palette(["#A04D3B", "#BF8649", "#CDB34C", "#E7DFA1"])
 
 if __name__ == "__main__":
 
@@ -97,6 +98,7 @@ if __name__ == "__main__":
         x="localizer",
         y="accuracy",
         palette=color_palette,
+        saturation=1,
         width=0.6,
         ax=ax,
     )
@@ -138,6 +140,7 @@ if __name__ == "__main__":
         x="stimuli",
         y="accuracy",
         palette=color_palette,
+        saturation=1,
         width=0.6,
         ax=ax,
     )

@@ -3,6 +3,7 @@ import json
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -16,7 +17,7 @@ def read_json(path):
 
 # Objects was #EFC94C, dE2000 = 3.0 from the Scenes gold beside it. Matches
 # selectivity/plot.py and the response-profile plotters.
-color_palette = sns.color_palette(["#E64B35", "#F39B2F", "#F1C232", "#A0522D"])
+color_palette = sns.color_palette(["#A04D3B", "#BF8649", "#CDB34C", "#E7DFA1"])
 
 if __name__ == "__main__":
 
@@ -70,8 +71,14 @@ if __name__ == "__main__":
     # drawn in the Objects colour, scenes in the Faces colour, and so on. The legend is
     # suppressed below, so nothing in the figure revealed the swap.
     hue_order = ["Faces", "Bodies", "Scenes", "Objects"]
-    cat_colors = {"Faces": "#E64B35", "Bodies": "#F39B2F",
-                  "Scenes": "#F1C232", "Objects": "#A0522D"}
+    # Objects' fill (#E7DFA1) is too pale to read as a LINE on white, so the Objects line
+    # and marker edges use a darker khaki while the marker faces keep the Objects colour
+    # the map and bar plots use. Darkening the whole mark instead has nowhere to go: a
+    # darker khaki lands on the Bodies ochre (whose line this one overlaps) or the Words
+    # olive, and a greyer one reads as a neutral baseline.
+    OBJECTS_FILL, OBJECTS_LINE = "#E7DFA1", "#8E8A58"
+    cat_colors = {"Faces": "#A04D3B", "Bodies": "#BF8649",
+                  "Scenes": "#CDB34C", "Objects": OBJECTS_LINE}
 
     sns.lineplot(
         data=results,
@@ -84,6 +91,11 @@ if __name__ == "__main__":
         markersize=15,
         palette=cat_colors,
     )
+    for _ln in plt.gca().get_lines():
+        if mcolors.to_hex(_ln.get_color()).lower() == OBJECTS_LINE.lower():
+            _ln.set_markerfacecolor(OBJECTS_FILL)
+            _ln.set_markeredgecolor(OBJECTS_LINE)
+            _ln.set_markeredgewidth(1.5)
 
     sns.despine()
 

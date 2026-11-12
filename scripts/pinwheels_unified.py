@@ -25,10 +25,10 @@ RUN_SEL = "topo-omni-tiled32-4608-snap438"
 WIDTH, THRESH, SD_THRESH, LAM = 5, 0.3, 30.0, 10.0
 TOPK, PTHR = 10.0, 0.001
 
-CATS = [("faces", "vision", "#E64B35"), ("bodies", "vision", "#F39B2F"),
-        ("scenes", "vision", "#F1C232"), ("objects", "vision", "#EFC94C"),
-        ("vwfa", "vision", "#D4AC0D"), ("speech", "audio", "#3B5B92"),
-        ("vocals", "audio", "#3F8F9C")]
+CATS = [("faces", "vision", "#A04D3B"), ("bodies", "vision", "#BF8649"),
+        ("scenes", "vision", "#CDB34C"), ("objects", "vision", "#E7DFA1"),
+        ("vwfa", "vision", "#877C26"), ("speech", "audio", "#485682"),
+        ("vocals", "audio", "#61A6A4")]
 
 def place(flat):
     return np.rot90(np.asarray(flat, float).reshape(W, H), k=1)
