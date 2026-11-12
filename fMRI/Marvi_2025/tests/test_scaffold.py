@@ -49,3 +49,11 @@ def test_dispatch_requires_derivatives_root():
     # not raise an unhandled error — the render handlers guard on it.
     with pytest.raises(SystemExit):
         make_figures.main(["--input-source", "precomputed"])
+
+
+def test_fig1b_dispatches_without_derivatives_root(monkeypatch):
+    # The Fig. 1b parcel panel is atlas-only, so it must not demand the cut.
+    calls = []
+    monkeypatch.setattr(make_figures, "render_fig1b", lambda args: calls.append(args) or "fig1b")
+    assert make_figures.main(["--figures", "fig1b_parcels"]) == 0
+    assert len(calls) == 1 and calls[0].derivatives_root is None

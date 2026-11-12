@@ -20,6 +20,7 @@ Reanalysis code for the Marvi EMFL dataset, producing the paper's Marvi-side fig
 |---|---|---|
 | Fig. A2 fROI profiles | Branch A: `06` → splits → frois → CV → extract → plot | `condition_responses_details_*.csv` means ± ε; fROI masks (Dice) |
 | Figs. 2 & 3 surface maps | Branch B: `08` → `09` → `11` → `12/18` → `10/19` | Figs 2 & 3 maps: spatial-r vs reference |
+| Fig. 1b brain panel (visual parcels on fsaverage6) | `data/PARCELS/` → `plot_figure_1b_parcels` (dev `visualize_roi_parcels_surface.py`) | per-region vertex counts (exact) |
 
 Individual-subject **fsnative** surface (paper). Branch B uses the **concatenated
 GLM (`08`)**, not per-run (`07`) — docs/DESIGN.md §7.
@@ -30,9 +31,14 @@ GLM (`08`)**, not per-run (`07`) — docs/DESIGN.md §7.
 > cosmetic differences from the published panels are expected (Inkscape post-processing);
 > the data should match.
 
-> **Fig. 1b** is a graphical abstract — its bars restate Figs 2 (visual) & 4 (== Fig. A2
-> language/MD). There is no separate Fig. 1b lineage; the panel ingredients come from the
-> Branch A + Branch B renders and are assembled downstream.
+> **Fig. 1b** is a graphical abstract. Its bars restate Figs 2 (visual) & 4 (== Fig. A2
+> language/MD) and come from the Branch A + Branch B renders. Its **brain panel** ("visual
+> clusters on the cortical surface") has its own small lineage, `fig1b_parcels`: the
+> anatomical EMFL parcels (scenes PPA/OPA/RSC, objects LOC, words VWFA, faces FFA/OFA/STS)
+> projected to fsaverage6 and drawn as filled regions. It uses no subject data, so it needs no
+> cut. It renders both variants made for the paper, with and without LOC, into
+> `plots/fig1b_parcels/`. Colours are the visual family of the Topo-Omni palette
+> (`CATEGORY_COLORS` in [`analysis/plot_figure_1b_parcels.py`](analysis/plot_figure_1b_parcels.py)).
 
 ## Precomputed cut
 
@@ -40,8 +46,13 @@ GLM (`08`)**, not per-run (`07`) — docs/DESIGN.md §7.
 FreeSurfer recon-all + CVS `.m3z` warps. Resolves via `--derivatives-root`.
 
 ```bash
-# Branch A (Fig. A2) + Branch B (Figs 2 & 3) from the precomputed derivatives:
+# Branch A (Fig. A2) + Branch B (Figs 2 & 3) + Fig. 1b brain panel from the precomputed derivatives:
 python make_figures.py --input-source precomputed --derivatives-root <DIR>
+# Fig. 1b brain panel only: atlas-only, no cut needed (fetches fsaverage6 via nilearn on first use)
+python make_figures.py --figures fig1b_parcels
+# The same parcels as binary fsaverage6 masks (GIFTI + one .npz + a JSON of vertex counts): one
+# per region (scenes, loc, vwfa, faces, bodies/EBA) and per parcel, overlaps kept
+python analysis/plot_figure_1b_parcels.py --masks-only --output-dir <DIR>
 ```
 
 **Anatomical parcels are vendored (standalone).** Branch A (fROI definition) needs the
@@ -106,6 +117,7 @@ snapshot, not a standing guarantee.
 | first_level_glm / 06 (A) | 1 subj/run, `faces_vs_objects` zmap | spatial-r = 1.0, max\|Δ\| = 0 (SLURM bigmem, nilearn 0.12.1) |
 | concatenated_glm / 08 (B) | 1 subj visual, 5 contrasts | spatial-r = 1.0, max\|Δ\| ~1e-12 (SLURM bigmem) |
 | project_parcels_to_surface / 12 (B) | 3 contours (CVS + affine paths) | Dice = 1.0, exact vertex sets (fMRIPrep-24.0.1 container) |
+| plot_figure_1b_parcels (Fig. 1b) | fsaverage6 label maps, both variants, L/R | exact per-region vertex counts; identical to the dev script's maps at the port (2026-09-24) |
 
 Render steps (`plot_figure_a2`; `visualize_native_surface` / 10) are **not**
 golden-mastered — the numeric golden sits upstream and only the render is exercised

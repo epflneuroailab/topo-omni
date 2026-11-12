@@ -69,16 +69,53 @@ CANONICAL_SUBJECTS = [
 ]
 N_SUBJECTS = len(CANONICAL_SUBJECTS)
 
+# Runs whose events.tsv holds only a copy of another run's video rows (ds005256 v1.1.0
+# data defect; value = the source run). Their true video timing is unknown. Excluded only
+# on request (run_full_analysis(excluded_runs=...) / cluster_contrasts --exclude-broken-runs);
+# the default path is the published analysis. Kept in sync with config.BROKEN_EVENT_RUNS
+# (tests/test_exclude_broken_runs.py). Full account: README "Runs with a copied events file".
+BROKEN_EVENT_RUNS = {
+    ('sub-0021', 'ses-01', 'run-03'): 'run-04',
+    ('sub-0065', 'ses-04', 'run-02'): 'run-01',
+    ('sub-0094', 'ses-04', 'run-01'): 'run-02',
+    ('sub-0105', 'ses-02', 'run-02'): 'run-01',
+}
+EXCLUDED_RUNS_SUFFIX = '_exclbrokenruns'
 
-def load_confounds(subject_id, confounds_dir):
+
+def broken_runs_by_subject():
+    """BROKEN_EVENT_RUNS as {subject: {(session, run), ...}} for run_full_analysis."""
+    by_sub = {}
+    for sub, ses, run in BROKEN_EVENT_RUNS:
+        by_sub.setdefault(sub, set()).add((ses, run))
+    return by_sub
+
+
+def session_run(path):
+    """(session, run) parsed from a BIDS-style filename, e.g. ('ses-01', 'run-03')."""
+    parts = Path(path).name.split('_')
+    session = [p for p in parts if p.startswith('ses-')][0]
+    run = [p for p in parts if p.startswith('run-')][0]
+    return session, run
+
+
+def _keep(files, exclude_runs):
+    """Drop files whose (session, run) is in exclude_runs (None/empty = keep all)."""
+    if not exclude_runs:
+        return files
+    return [f for f in files if session_run(f) not in exclude_runs]
+
+
+def load_confounds(subject_id, confounds_dir, exclude_runs=None):
     """Load the standard 24 confounds for a subject, concatenated across runs, z-scored.
 
     Raises ValueError if any of the 24 named confounds is absent from any run — this is
     the mechanism that drops 5 subjects to yield the published n=78 (docs/DESIGN.md §7).
+    ``exclude_runs``: {(session, run)} left out entirely (default: none).
     """
-    confound_files = sorted(Path(confounds_dir).glob(
+    confound_files = _keep(sorted(Path(confounds_dir).glob(
         f'{subject_id}/ses-*/func/*_desc-confounds_timeseries.tsv'
-    ))
+    )), exclude_runs)
 
     if not confound_files:
         raise FileNotFoundError(f"No confound files found for {subject_id}")
@@ -119,11 +156,14 @@ def load_confounds(subject_id, confounds_dir):
     return confounds
 
 
-def load_bold(subject_id, hemi, bold_dir):
-    """Load fsaverage6 BOLD for one hemisphere: (n_trs, n_vertices), runs concatenated."""
-    bold_files = sorted(Path(bold_dir).glob(
+def load_bold(subject_id, hemi, bold_dir, exclude_runs=None):
+    """Load fsaverage6 BOLD for one hemisphere: (n_trs, n_vertices), runs concatenated.
+
+    ``exclude_runs``: {(session, run)} left out entirely (default: none).
+    """
+    bold_files = _keep(sorted(Path(bold_dir).glob(
         f'{subject_id}/ses-*/func/*_hemi-{hemi}_space-fsaverage6_bold.func.gii'
-    ))
+    )), exclude_runs)
 
     if not bold_files:
         raise FileNotFoundError(f"No BOLD files found for {subject_id} hemi-{hemi}")
@@ -203,16 +243,17 @@ def save_gifti(data, output_path, hemi):
     nib.save(img, output_path)
 
 
-def load_subject_events(subject_id, bids_dir):
+def load_subject_events(subject_id, bids_dir, exclude_runs=None):
     """Load task-alignvideo events for a subject → DataFrame with run-relative timing.
 
     Columns: [video_name, onset_seconds, duration_seconds, session, run].
+    ``exclude_runs``: {(session, run)} left out entirely (default: none).
     """
     all_events = []
 
-    event_files = sorted(Path(bids_dir).glob(
+    event_files = _keep(sorted(Path(bids_dir).glob(
         f'{subject_id}/ses-*/func/*_task-alignvideo_*_events.tsv'
-    ))
+    )), exclude_runs)
 
     for event_file in event_files:
         parts = event_file.stem.split('_')
@@ -247,27 +288,41 @@ def load_subject_events(subject_id, bids_dir):
     return pd.concat(all_events, ignore_index=True)
 
 
-def run_subject_analysis(subject_id, target_id, bold_dir, confounds_dir, cluster_df, bids_dir):
+def run_subject_analysis(subject_id, target_id, bold_dir, confounds_dir, cluster_df, bids_dir,
+                         exclude_runs=None):
     """Run the cluster GLM for one subject → (t_lh, t_rh), or (None, None) on any error.
 
     The blanket except is the published behavior: a subject whose confounds fail to load
     (missing named columns) is silently dropped (docs/DESIGN.md §7).
+
+    ``exclude_runs``: {(session, run)} removed from events, run boundaries, confounds and
+    BOLD alike, so the subject is analyzed as if those runs were never acquired (used for
+    BROKEN_EVENT_RUNS). Default: none = the published analysis.
+
+    A subject with no target timepoints (the cluster's videos fall only in excluded or
+    mislabeled runs) is dropped with an explicit message. The published run reached the
+    same outcome through a singular design matrix.
     """
     print(f"\nProcessing {subject_id}...")
+    if exclude_runs:
+        print(f"  Excluding runs: {sorted(exclude_runs)}")
     sys.stdout.flush()
 
     try:
-        events_df = load_subject_events(subject_id, bids_dir)
-        run_info = load_run_info(subject_id, bold_dir)
+        events_df = load_subject_events(subject_id, bids_dir, exclude_runs=exclude_runs)
+        run_info = load_run_info(subject_id, bold_dir, exclude_runs=exclude_runs)
 
         target, contrast = create_cluster_regressors(target_id, cluster_df, events_df, run_info)
+        if not np.any(target):
+            raise ValueError(f"no target timepoints for cluster {target_id} in this subject's "
+                             f"(non-excluded) runs")
 
-        confounds = load_confounds(subject_id, confounds_dir)
+        confounds = load_confounds(subject_id, confounds_dir, exclude_runs=exclude_runs)
 
         design_matrix = np.column_stack([target, contrast, confounds])
 
-        bold_lh = load_bold(subject_id, 'L', bold_dir)
-        bold_rh = load_bold(subject_id, 'R', bold_dir)
+        bold_lh = load_bold(subject_id, 'L', bold_dir, exclude_runs=exclude_runs)
+        bold_rh = load_bold(subject_id, 'R', bold_dir, exclude_runs=exclude_runs)
 
         betas_lh, residuals_lh = fit_glm(bold_lh, design_matrix)
         betas_rh, residuals_rh = fit_glm(bold_rh, design_matrix)
@@ -331,11 +386,15 @@ def load_subject_tmaps(subject_maps_root, target_id, subjects=None):
 
 def run_full_analysis(target_id, output_dir, bold_dir, confounds_dir, bids_dir,
                       cluster_file, subjects=None, reuse_subject_maps=False,
-                      subject_maps_root=None):
+                      subject_maps_root=None, excluded_runs=None):
     """Run the complete cluster contrast: subject-level GLMs + group-level t-test/FDR.
 
     Writes per-subject t-maps under `subject_level/cluster-XX/` and group
     `tstat/pval/mean` GIFTIs + summary.json under `group_level/`. Returns True on success.
+
+    ``excluded_runs``: {subject: {(session, run), ...}} dropped from that subject's GLM
+    (e.g. ``broken_runs_by_subject()``). Default None = the published analysis. The
+    exclusions that applied to included subjects are recorded in the per-cluster summary.
 
     ``reuse_subject_maps=True`` (the precomputed-cut / render-only path, docs/DESIGN.md §5.1-C):
     skip the per-subject GLM entirely and load the shipped `subject_level/` t-maps instead
@@ -377,7 +436,8 @@ def run_full_analysis(target_id, output_dir, bold_dir, confounds_dir, bids_dir,
 
         for subject_id in subjects:
             t_lh, t_rh = run_subject_analysis(
-                subject_id, target_id, bold_dir, confounds_dir, cluster_df, bids_dir
+                subject_id, target_id, bold_dir, confounds_dir, cluster_df, bids_dir,
+                exclude_runs=(excluded_runs or {}).get(subject_id),
             )
 
             if t_lh is not None and t_rh is not None:
@@ -450,8 +510,17 @@ def run_full_analysis(target_id, output_dir, bold_dir, confounds_dir, bids_dir,
         'n_sig_rh': int(n_sig_rh),
         'n_sig_total': int(n_sig_lh + n_sig_rh),
     }
+    # Legacy shared file: overwritten by every cluster (kept for existing readers only).
     with open(group_dir / 'summary.json', 'w') as f:
         json.dump(summary, f, indent=2)
+    # Per-cluster summary (Sep 2026 fix): one file per cluster, so parallel array tasks do
+    # not overwrite each other, plus the exact subject list (the blanket except in
+    # run_subject_analysis drops a subject on ANY error, not only the 5 confound drops).
+    applied = sorted({(s, ses, run) for s in successful_subjects
+                      for ses, run in (excluded_runs or {}).get(s, ())})
+    with open(group_dir / f'{prefix}_summary.json', 'w') as f:
+        json.dump({**summary, 'subjects': list(successful_subjects),
+                   'excluded_runs': [list(x) for x in applied]}, f, indent=2)
 
     print("\n" + "=" * 80)
     print("✓ ANALYSIS COMPLETE")

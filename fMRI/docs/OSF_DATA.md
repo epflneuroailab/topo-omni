@@ -68,8 +68,10 @@ https://osf.io/settings/tokens is enough); against the public components it is s
 
 The retrieval engine lives in `core/precomputed.py`.
 
-Licensing (set in each component's OSF metadata): **CC-BY 4.0** for Pernet_2015; **CC0** for
-Marvi_2025 and Jung_2025.
+Licensing (set in each component's OSF metadata): **CC-BY 4.0** for all three components
+(Pernet_2015, Marvi_2025, Jung_2025) and the umbrella project. The raw source datasets keep
+their own licences (OpenNeuro ds006179 and ds005256: CC0; Edinburgh DataShare 10283/818:
+CC-BY 4.0).
 
 ## Verify from a clean clone
 

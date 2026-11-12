@@ -9,31 +9,30 @@ figures (AlKhamissi & Mehrer et al., 2026).
 
 ## Figures & lineages (allow-list — docs/DESIGN.md §2.4)
 
-All six brain-validation maps are **single discovered clusters** from the one **54-cluster
-(new54)** partition. (Appendix D's "14 clusters" is a typo for 54 — confirmed by the
-authors, Mehrer + AlKhamissi, 2026-07-07; the 14-/21-/22-cluster branches are **not** in
-the paper. Implementation notes §4.)
+The revised paper (Nature Communications revision, Nov 2026) shows **two single discovered
+clusters of the 16-cluster (`new16`) partition** of the revised checkpoint, with the four
+runs whose events file is a copy of another run **excluded** (`--exclude-broken-runs`,
+section "Runs with a copied events file" below). Both maps are n=78 / df=77.
 
-| Paper figure | Cluster IDs (new54) | Networks | Dev lineage | Golden master (docs/DESIGN.md §6) |
+| Paper figure | Family | Cluster ID | Content | Dev lineage |
 |---|---|---|---|---|
-| Fig. 6 / Fig. D4 | 5, 32, 49 | animals · natural landscapes · **faces** (D4c) | `44` → `45` → `47` | group t/p/mean maps: max\|Δ\| + Pearson r |
-| Fig. D5 | 6, 30, 31 | planetearth · mountainbike ×2 | `44` → `45` → `47` | group t/p/mean maps: max\|Δ\| + Pearson r |
+| Fig. 6a | new16, broken runs excluded | 7 | television news interviews (120 segments, 3 news reports) | `44` → `45` → `47` |
+| Fig. 6b | new16, broken runs excluded | 10 | natural landscapes (155 segments: mountainbike, freesolo, skiing) | `44` → `45` → `47` |
 
-> The **faces network is cluster 49** (`normativeprosocial` videos → right IT near FFA) —
-> strong (maxT 4.38, ~64.7k FDR survivors), **not** the null talking-head clusters
-> (`angrygrandpa`/`harrymetsally`). Semantic labels are the authors'; the auto-derived
-> CSV labels are video-name-based.
+> **Cluster numbering is 0-based** — identical across the model JSON, the CSV, the on-disk
+> `group_cluster-NN` filenames, `config.FIGURES`, and the paper's cluster numbers.
 
-> **Cluster numbering is 0-based (IDs 0–53)** — identical across the model JSON, the CSV,
-> the on-disk `group_cluster-NN` filenames, `config.FIGURES`, and the paper's cluster
-> numbers (no off-by-one; verified via the authors' "cluster 7 is the only non-sig one",
-> which is our null `cluster-07`). Full ID → content → figure table:
-> [`data/cluster_assignments/CLUSTER_INDEX.md`](data/cluster_assignments/CLUSTER_INDEX.md).
+### arXiv v1/v2 maps (`new54`)
 
-Driver: `make_figures.py` (`fig6_d4`, `figD5`). Both figures share one local,
-pure-numpy/scipy/nibabel engine (**no nilearn** at analysis time) and the identical
-cluster-assignment CSV, differing only in which cluster IDs are rendered, so the maps
-reproduce the published derivatives near-bitwise (docs/DESIGN.md §4).
+The preprint showed six single clusters of the **54-cluster (`new54`)** partition of the
+earlier strip model: IDs 5/32/49 (old Fig. 6 / D4: animals, natural landscapes, faces) and
+6/30/31 (old Fig. D5), with all runs kept. They remain reproducible (bitwise goldens below)
+with `analysis/cluster_contrasts.py --family new54`; they are no longer paper figures.
+Full ID → content table: [`data/cluster_assignments/CLUSTER_INDEX.md`](data/cluster_assignments/CLUSTER_INDEX.md).
+
+Driver: `make_figures.py` (`fig6`). One local, pure-numpy/scipy/nibabel engine (**no
+nilearn** at analysis time) for every family; families differ only in the
+cluster-assignment CSV.
 
 ### Release file map (`analysis/`)
 | Release module | Dev source | Role |
@@ -43,6 +42,8 @@ reproduce the published derivatives near-bitwise (docs/DESIGN.md §4).
 | `glm_engine.py` | `glm_unified.py` (cluster path) + `confounds_standard`/`canonical_subjects` | per-subject OLS GLM → group t-test → FDR; **hosts the n=78 drop** |
 | `cluster_contrasts.py` | `45` | driver: one cluster of the new54 family, path-agnostic |
 | `visualize_clusters.py` | `17_v2` (lean) + `47` | top-10%-of-FDR inflated HTML (viridis); Moran's/PNG/multi-variant dropped |
+| `summarize_family.py` | new (Sep 2026) | one row per cluster of a family: max t, FDR survivors, n, content |
+| `compare_families.py` | new (Sep 2026) | a family vs a reference family: clip overlap + t-map r / Dice per cluster pair; `--ids` / `--all-pairs` for targeted tables |
 
 ### Golden-master status (docs/DESIGN.md §6)
 - **Parse CSV — BITWISE (green):** the new54 family reproduces the on-disk cluster CSV
@@ -79,7 +80,7 @@ published maps — **not built** (no `--confounds-tolerant` deviation). docs/DES
 `task-alignvideo` `events.tsv` (`--raw-root`; defaults to the derivatives-root's parent).
 
 ```bash
-# default: reproduce all six published maps from the shipped derivatives (no raw, no fMRIPrep)
+# default: reproduce the two Fig. 6 maps from the shipped subject-level t-maps (no raw, no fMRIPrep)
 python make_figures.py --input-source precomputed \
     --derivatives-root <DERIV> --raw-root <BIDS>
 
@@ -106,10 +107,208 @@ bitwise-reproducible (docs/DESIGN.md §2.5/§6).
 
 ## Model-derived inputs (vendored)
 
-The new54 cluster-assignment JSON comes from the topographic model (`topo-omni`) —
-vendored fixture under `data/cluster_assignments/`, pinned by commit + hash in
-`data/PROVENANCE.md`. This release regenerates the **vendored-fixture** version of
-Figs. 6 / D4 / D5; swapped for live `topo-omni` output at merge (docs/DESIGN.md §5).
+The cluster-assignment JSONs (new54, new27, new16) come from the topographic model
+(`topo-omni`) — vendored under `data/cluster_assignments/`, pinned by hash in
+`data/PROVENANCE.md`.
+
+## Rebuttal rerun (Sep 2026): the new-model partition (`new27`)
+
+The same cluster-vs-others validation, run on **every** cluster of the partition produced
+by the new Topo-Omni checkpoint (27 raw dendrogram leaves; provenance in
+`data/PROVENANCE.md`). Engine, design, confounds, subjects and thresholds are the
+published ones, with one decided change: the four runs with a copied events file are
+dropped (next section). Not a paper figure; the paper uses its coarser cut `new16`.
+
+```bash
+cd fMRI/Jung_2025 && mkdir -p slurm/logs
+# 1. smoke test: one cluster, 3 subjects, to a scratch results root (~10 min)
+sbatch --array=0 --time=01:00:00 --export=ALL,DERIV=<DERIV>,BIDS=<BIDS>,PY=<python>,\
+RESULTS_ROOT=<scratch>,SUBJECTS="sub-0001 sub-0002 sub-0003" slurm/cluster_contrasts_array.sbatch
+# 2. all 27 clusters (bigmem, ~2 h each, in parallel); broken runs excluded by default
+sbatch --export=ALL,DERIV=<DERIV>,BIDS=<BIDS>,PY=<python> slurm/cluster_contrasts_array.sbatch
+#    -> <DERIV>/cluster_contrasts_new27clusters_exclbrokenruns/
+# 3. the six paper clusters under the same remedy (robustness check vs the published maps)
+sbatch --array=5,6,30,31,32,49 --export=ALL,FAMILY=new54,DERIV=<DERIV>,BIDS=<BIDS>,PY=<python> \
+    slurm/cluster_contrasts_array.sbatch
+#    -> <DERIV>/cluster_contrasts_new54clusters_exclbrokenruns/
+# 4. one row per cluster: max t, joint-hemisphere FDR survivors, n, content, best new54 match
+python analysis/summarize_family.py --family new27 --exclude-broken-runs --results-root <DERIV> \
+    --reference-family new54 --reference-ids 5 32 49 6 30 31
+```
+
+Reading the table:
+- `n_fdr_survivors` counts vertices at or above the one-tailed BH-FDR q<.05 threshold
+  computed jointly over both hemispheres — the threshold the figures use.
+- `n_unmodeled_clips`: the published design marks as "others" only videos **not** in the
+  target cluster, so clips of a target video that belong to other clusters are in neither
+  regressor. Near zero for single-video clusters; large for mixed ones.
+- `status` is `done` only if the group test used the expected 78 subjects. The engine drops
+  a subject on any error. With the broken runs excluded, clusters 8 and 14 are expected at
+  n=77 (next section); any other value means a task needs a look before rerunning.
+- `excluded_runs` lists the dropped runs that belonged to subjects in that cluster's test.
+- Each cluster writes its own `group_cluster-NN_…_summary.json` with the subject list and
+  the excluded runs. The old shared `group_level/summary.json` is overwritten by every
+  cluster and kept only for back-compat.
+
+### The coarser cut (`new16`) and the comparison with new27 / new54
+
+Badr's second partition (2026-09-24, `clusters_tvals_disjoint_min60.json` →
+`data/cluster_assignments/16_cluster.json`) is the same run cut higher in the dendrogram
+(min cluster size 60). It is an exact coarsening of new27 (`config.NEW16_FROM_NEW27`):
+8 clusters are unchanged, 8 merge 2–4 new27 clusters. Because the design depends only on the
+target clips, the 8 unchanged clusters must reproduce their new27 maps (`map_r` ≈ 1 in the
+comparison, which warns otherwise). Same engine, remedy and thresholds as new27.
+
+```bash
+cd fMRI/Jung_2025
+# 1. all 16 clusters (same resources as new27)
+sbatch --array=0-15 --export=ALL,FAMILY=new16,DERIV=<DERIV>,BIDS=<BIDS>,PY=<python> \
+    slurm/cluster_contrasts_array.sbatch
+#    -> <DERIV>/cluster_contrasts_new16clusters_exclbrokenruns/
+# 2. per-cluster table, best match among the six paper clusters
+python analysis/summarize_family.py --family new16 --exclude-broken-runs --results-root <DERIV> \
+    --reference-family new54 --reference-ids 5 32 49 6 30 31
+# 3. comparisons: vs new27 (each new16 cluster vs the new27 clusters it contains), vs all 54
+#    published new54 maps, and vs the six paper clusters under the same broken-runs remedy
+python analysis/compare_families.py --family new16 --reference-family new27 \
+    --exclude-broken-runs --results-root <DERIV>
+python analysis/compare_families.py --family new16 --reference-family new54 \
+    --exclude-broken-runs --results-root <DERIV> \
+    --reference-group-dir <DERIV>/cluster_contrasts_new54clusters/group_level
+python analysis/compare_families.py --family new16 --reference-family new54 \
+    --exclude-broken-runs --results-root <DERIV> --reference-ids 5 32 49 6 30 31 \
+    --out-prefix <DERIV>/cluster_contrasts_new16clusters_exclbrokenruns/compare_new54paper_exclbrokenruns
+# 4. figures: top-10%-of-FDR inflated HTML for every cluster with FDR survivors
+python analysis/visualize_clusters.py \
+    --contrast-dir <DERIV>/cluster_contrasts_new16clusters_exclbrokenruns/group_level \
+    --output-dir plots/cluster_contrasts_new16clusters_exclbrokenruns --figure-tag new16 \
+    --cluster-labels <ID=LABEL ...>
+# 5. the two FDR-surviving clusters (7, 10), each against the six paper maps and against the
+#    new27 clusters they merge (7 = 10+11+12, 10 = 16+17), all pairs whether or not they
+#    share clips; one table per cluster x reference
+OUT=<DERIV>/cluster_contrasts_new16clusters_exclbrokenruns
+for c in 07 10; do
+  python analysis/compare_families.py --family new16 --ids $c --reference-family new54 \
+      --exclude-broken-runs --results-root <DERIV> --reference-ids 5 32 49 6 30 31 \
+      --all-pairs --no-plot --out-prefix $OUT/compare_c${c}_vs_new54paper_exclbrokenruns
+  python analysis/compare_families.py --family new16 --ids $c --reference-family new27 \
+      --exclude-broken-runs --results-root <DERIV> --reference-ids 10 11 12 16 17 \
+      --all-pairs --no-plot --out-prefix $OUT/compare_c${c}_vs_new27_exclbrokenruns
+done
+```
+
+Reading the comparison (`compare_<ref>.csv`, one row per pair sharing clips;
+`compare_<ref>_per_cluster.csv`, one row per cluster; `compare_<ref>_map_r.png`):
+- `relation`: `identical`, `a_contains_b` (the new16 cluster merges that reference
+  cluster), `b_contains_a`, `partial`, or `disjoint` (no shared clips; only with
+  `--all-pairs`).
+- `map_r` is the whole-brain correlation of the two unthresholded group t-maps. Every
+  cluster-vs-others map shares a common video-vs-video component, so `map_r` stays at
+  about 0.6–0.8 even between clusters with no clips in common.
+- `dice_top10` is the Dice of the top-10%-of-FDR-survivor masks, i.e. what the figures
+  show. `dice_top10_all` uses the top 10% of all 81,924 vertices instead, so it is also
+  defined when one map is null; the two agree within ~0.04 for the maps here. Both separate
+  matching from unrelated maps far better than `map_r` (≈0.3 unrelated vs 0.7–1.0 matched).
+- `dice_fdr` (the FDR-survivor masks) discriminates poorly: a strong map has 55–80k of the
+  81,924 vertices above threshold, so any two strong maps overlap at Dice ≈0.85–0.97.
+- A Dice against a null map (`ref_n_fdr` = 0) is 0 by construction, not evidence of a
+  mismatch; use `map_r` or `dice_top10_all` there.
+- `best_map_ref_id` is the most-correlated reference map over all reference clusters,
+  whether or not they share clips.
+
+### new16 results (runs of 2026-09-24/25, broken runs excluded)
+
+All 16 clusters ran at n=78. Only two survive FDR (joint-hemisphere one-tailed BH, q<.05):
+
+| new16 | content (new27 parts) | max t | FDR t | FDR survivors | HTML figures (`plots/cluster_contrasts_new16clusters_exclbrokenruns/`) |
+|---|---|---|---|---|---|
+| 7 | normativeprosocial 1+2+3 (10+11+12) | 4.42 | 1.77 | 65,379 | `new16_cluster07_normativeprosocial_{lh,rh}_top10pct_inflated.html` |
+| 10 | freesolo + mountainbike + skiing (16+17) | 4.14 | 1.71 | 74,487 | `new16_cluster10_freesolo-mountainbike-skiing_{lh,rh}_top10pct_inflated.html` |
+
+The other 14 are null; that includes new16 13, which absorbs paper clusters 5 (animals) and
+6 (planetearth) and is identical to the null new27 21. The 8 unchanged clusters reproduce
+their new27 maps exactly (max |Δt| = 0).
+
+How the two clusters compare with the six paper maps and with their new27 parts. The
+reference maps are the broken-runs-excluded reruns. r = correlation of the unthresholded
+t-maps. Dice = top 10% of FDR survivors (figure definition) / top 10% of all vertices.
+Written by step 5 above to
+`<DERIV>/cluster_contrasts_new16clusters_exclbrokenruns/compare_c{07,10}_vs_{new54paper,new27}_exclbrokenruns.{csv,md}`.
+
+| new16 7 vs new54 paper | r | Dice | | new16 10 vs new54 paper | r | Dice |
+|---|---|---|---|---|---|---|
+| 5 animals | .70 | .34 / .38 | | 5 animals | .80 | .55 / .57 |
+| 32 natural landscapes | .66 | .34 / .39 | | 32 natural landscapes | **.95** | **.73 / .74** |
+| **49 faces** | **1.00** | **.98 / .98** | | 49 faces | .57 | .29 / .32 |
+| 6 planetearth | .70 | .32 / .38 | | 6 planetearth | .77 | .45 / .48 |
+| 30 mountainbike | .67 | .35 / .39 | | **30 mountainbike** | **.95** | **.73 / .75** |
+| 31 mountainbike | .67 | .35 / .39 | | **31 mountainbike** | **.96** | **.77 / .78** |
+
+| new16 7 vs new27 | r | Dice | | new16 10 vs new27 | r | Dice |
+|---|---|---|---|---|---|---|
+| 10 normativeprosocial1 (part) | .89 | .53 / .57 | | 10 normativeprosocial1 | .63 | .34 / .38 |
+| 11 normativeprosocial3 (part, null) | .83 | – / .52 | | 11 normativeprosocial3 (null) | .61 | – / .40 |
+| **12 normativeprosocial2 (part)** | **.94** | **.67 / .69** | | 12 normativeprosocial2 | .63 | .36 / .38 |
+| 16 freesolo (null) | .25 | – / .13 | | 16 freesolo (part, null) | .58 | – / .31 |
+| 17 mountainbike+skiing | .63 | .33 / .37 | | **17 mountainbike+skiing (part)** | **.97** | **.81 / .81** |
+
+- new16 7 is the paper's faces map (49): 120 of 49's 131 clips, r = 1.00, Dice .98.
+- new16 10 carries the three mountainbike/landscape paper maps (it contains all their clips),
+  r ≈ .95, Dice .73–.78, and is essentially new27 17; freesolo adds little.
+- Unrelated pairs still correlate at r ≈ .57–.80 but reach only Dice ≈ .29–.55.
+
+### Runs with a copied events file (ds005256 v1.1.0 data defect)
+
+**The defect.** Four of the 78 analyzed subjects have one run whose `task-alignvideo`
+`events.tsv` contains only video rows, identical in onset, duration and file to another
+run's, and no rating rows. The other run's file is complete. Found 2026-09-23 while
+explaining subject drops; pinned by `tests/test_exclude_broken_runs.py`.
+
+| Subject | Broken run | Video rows repeat | Broken run's scan length vs. canonical |
+|---|---|---|---|
+| sub-0021 | `ses-01 run-03` | `run-04` | 1016 = 1016 |
+| sub-0065 | `ses-04 run-02` | `run-01` | 926 ≈ 930 |
+| sub-0094 | `ses-04 run-01` | `run-02` | 862 < 1266 |
+| sub-0105 | `ses-02 run-02` | `run-01` | 1582 < 1855 |
+
+The scans are the listed runs; only their events are wrong. So the true video timing of
+these four runs is unknown. The raw behavioral logs are not in the public release.
+
+**Impact on the published analysis.** The published maps modeled these four runs with the
+wrong videos. In every cluster this puts some wrong timepoints into the "others" regressor
+for these subjects: 4 of 1,014 runs. Where a cluster's target clips sat in the broken run,
+the target was empty, the design singular, and the subject dropped. sub-0021's copied
+`angrygrandpa` event also ends after its run-03 scan does, so its timepoints spill into
+run-04 and collide with that run's target clips, which trips the overlap check. Result: 16 non-paper new54 clusters at n=77. All six paper clusters
+kept n=78. A simulation from events and confound run lengths, without BOLD, reproduces
+exactly which subject is missing from which cluster in the on-disk published results.
+
+**Decision (authors, 2026-09-23): drop exactly these four runs.** Each of the four subjects
+contributes its other 12 runs; runs are removed from events, run boundaries, confounds and
+BOLD alike (`cluster_contrasts.py --exclude-broken-runs`, the SLURM script's default).
+
+| Option | Subjects | Runs | Scan hours |
+|---|---|---|---|
+| Published (broken runs mis-modeled) | 78 | 1014 | 151.3 |
+| **Drop the 4 broken runs (chosen)** | 78 | 1010 | 150.8 |
+| Drop the 4 subjects everywhere | 74 | 962 | 143.7 |
+
+Also considered: asking the Spacetop authors for the correct events files.
+
+**What the remedy cannot fix.** A subject whose only showing of a cluster's videos is in
+its broken run has no data for that cluster and still drops, now with the explicit message
+"no target timepoints". Predicted with the exclusion:
+
+| Family | Clusters at n=77 | All others |
+|---|---|---|
+| new27 | 8 (mediabias; sub-0105), 14 (universe; sub-0094) | n=78 (cluster 22 recovers sub-0021) |
+| new16 | none (clusters 6 and 9 contain new27 8 and 14 and recover those subjects) | n=78 |
+| new54 paper clusters 5/32/49/6/30/31 | none | n=78 |
+
+**Reproducibility.** The published analysis is untouched: without the flag, the engine is
+the published one and `make_figures.py` reproduces the paper maps bitwise. Remedied outputs
+always go to a separate `*_exclbrokenruns` directory, so the two are never mixed.
+`EXCLUDE_BROKEN_RUNS=0` runs the published variant with the SLURM script.
 
 ## Not ported (deny-list — index §7 / docs/DESIGN.md §8)
 
@@ -140,6 +339,10 @@ ship surface-space + defaced anat only on the derivative tier (docs/DESIGN.md §
   produced it is not recoverable from the vendored fixture and lives on the modeling side,
   not this release (described in `data/PROVENANCE.md`).
 - Precomputed-tier minimum subset; top-10%-of-FDR is the single published viz threshold.
+- **Open (2026-09-23):** four runs in ds005256 v1.1.0 have an events file that only repeats
+  another run's video rows (see "Runs with a copied events file"). Worth reporting to the
+  Spacetop authors, who may hold the correct files. The paper's six maps include these runs
+  mis-modeled; the remedied rerun of those six clusters quantifies the effect.
 
 > **STATUS:** Stage-1 ported and wired (54-cluster-only; Figs. 6/D4 + D5); parse + n=78 goldens green;
 > per-subject GLM bitwise-verified; **group-map golden frozen (all six clusters bitwise, max|Δ|=0.0)**.

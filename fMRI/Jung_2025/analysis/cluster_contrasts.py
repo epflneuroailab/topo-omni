@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
-"""Driver: run the cluster-vs-others GLM for one cluster of the new54 family.
+"""Driver: run the cluster-vs-others GLM for one cluster of a family (new54 / new27 / new16).
 
 Path-agnostic port of dev `src/45_new54cluster_contrasts_standard.py` — a thin wrapper
-over the shared engine (20251211_fMRI_movie_watching_spacetop @ 4066746). All six
-published maps are single discovered clusters of the one new54 (54-cluster) partition
-(App. D "14 clusters" is a typo for 54 — README §4); the dev 14-/21-/22-cluster +
-supercluster wrappers are NOT ported (docs/DESIGN.md §8).
+over the shared engine (20251211_fMRI_movie_watching_spacetop @ 4066746). The revised
+paper's Fig. 6 = new16 clusters 7 and 10 with ``--exclude-broken-runs`` (make_figures.py);
+the dev 14-/21-/22-cluster + supercluster wrappers are NOT ported (docs/DESIGN.md §8).
 
   - ``--family new54`` → cluster_contrasts_new54clusters/
-      IDs 5/32/49 → Fig. 6 / D4  ·  IDs 6/30/31 → Fig. D5
+      arXiv v1/v2 maps: IDs 5/32/49 → old Fig. 6 / D4  ·  IDs 6/30/31 → old Fig. D5
+  - ``--family new27`` → cluster_contrasts_new27clusters/
+      Sep 2026 rebuttal rerun on the new-model partition (IDs 0–26; no paper figure).
+      Same engine and design; only the cluster-assignment CSV differs.
+  - ``--family new16`` → cluster_contrasts_new16clusters/
+      The same partition cut coarser (min cluster size 60; IDs 0–15; no paper figure).
 
 Reads the fsaverage6 BOLD + confounds under ``--derivatives-root`` and the (raw)
 ``task-alignvideo`` events under ``--bids-root`` (needed for run-relative video onsets);
@@ -25,10 +29,14 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from glm_engine import run_full_analysis  # noqa: E402
+from glm_engine import (  # noqa: E402
+    BROKEN_EVENT_RUNS, EXCLUDED_RUNS_SUFFIX, broken_runs_by_subject, run_full_analysis,
+)
 
 FAMILIES = {
     'new54': {'derivatives_subdir': 'cluster_contrasts_new54clusters'},
+    'new27': {'derivatives_subdir': 'cluster_contrasts_new27clusters'},
+    'new16': {'derivatives_subdir': 'cluster_contrasts_new16clusters'},
 }
 
 
@@ -55,6 +63,11 @@ def build_parser():
                    help='Dir CONTAINING subject_level/ for --from-subject-maps (the read-only '
                         'cut). Default: --output-dir. Set this when outputs go to a separate '
                         '--output-dir / --results-root from the shipped subject-level cut.')
+    p.add_argument('--exclude-broken-runs', action='store_true',
+                   help='Drop the 4 runs whose events file only repeats another run\'s video '
+                        'rows (glm_engine.BROKEN_EVENT_RUNS; README "Runs with a copied events '
+                        'file"). Default output dir gets the suffix '
+                        f'"{EXCLUDED_RUNS_SUFFIX}". Off by default = the published analysis.')
     return p
 
 
@@ -70,12 +83,17 @@ def main(argv=None):
 
     cluster_label = df[df['cluster_id'] == args.cluster_id].iloc[0]['cluster_label']
 
+    suffix = EXCLUDED_RUNS_SUFFIX if args.exclude_broken_runs else ''
     output_dir = args.output_dir or (
-        Path(args.derivatives_root) / FAMILIES[args.family]['derivatives_subdir']
+        Path(args.derivatives_root) / (FAMILIES[args.family]['derivatives_subdir'] + suffix)
     )
+    excluded_runs = broken_runs_by_subject() if args.exclude_broken_runs else None
     print(f"Family:  {args.family}")
     print(f"Cluster: {args.cluster_id} ({cluster_label})")
     print(f"Output:  {output_dir}")
+    if excluded_runs:
+        print(f"Excluding {len(BROKEN_EVENT_RUNS)} runs with a copied events file: "
+              f"{sorted(BROKEN_EVENT_RUNS)}")
 
     success = run_full_analysis(
         target_id=args.cluster_id,
@@ -87,6 +105,7 @@ def main(argv=None):
         subjects=args.subjects,
         reuse_subject_maps=args.from_subject_maps,
         subject_maps_root=args.subject_maps_root,
+        excluded_runs=excluded_runs,
     )
 
     if success:
