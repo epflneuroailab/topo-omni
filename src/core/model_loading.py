@@ -81,6 +81,23 @@ def load_topo_omni(model=None, device="cuda", baseline=False, random_init=False,
     config.audio_config.is_training = False
     config.vision_config.is_training = False
     config.text_config.is_training = False
+
+    # `cortical_dim` is the adaptor width, and it is written into a trained run's config.json
+    # by train.py. The stock Qwen2.5-Omni-3B config has no such key, so the adaptors would
+    # default to square (hidden_size: 1280 encoder / 2048 thinker) -- and on any layout whose
+    # units-per-layer differ from that, `_band_from_layers` raises
+    #   "sheet layout tiled gives 4608 units per encoder slot, but the vision adaptor is 1280"
+    # which is exactly what the `baseline` and `random_init` controls hit. Take the width from
+    # the active sheet layout when, and only when, the config does not already carry one:
+    # a trained checkpoint keeps its own value, so a genuine layout/checkpoint mismatch still
+    # surfaces as that error instead of being silently papered over.
+    if DEFAULT_SHEET_LAYOUT.cortical_dim is not None:
+        for _sub in ("audio_config", "vision_config", "text_config"):
+            _c = getattr(config, _sub)
+            if getattr(_c, "cortical_dim", None) is None:
+                _c.cortical_dim = DEFAULT_SHEET_LAYOUT.cortical_dim
+                print(f"> {_sub}.cortical_dim not in config; taking "
+                      f"{DEFAULT_SHEET_LAYOUT.cortical_dim} from the active sheet layout")
     # Needed so forward() assembles the unified cortical sheet; the spatial *loss* stays off
     # at inference (no labels are passed), so no neighborhood/position files are required.
     config.apply_spatial_loss = True

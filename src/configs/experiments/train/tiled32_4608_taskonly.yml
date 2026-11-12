@@ -110,6 +110,14 @@ train:
   warmup-ratio: 0.03
   weight-decay: 0.01
   apply-spatial-loss: false
+  # Retention only -- this does NOT touch training dynamics, so the run stays a matched
+  # control despite the comment above saying save-total-limit is left at the default.
+  # It is raised because that default of 1 already cost this run once: the step-365 save
+  # was interrupted, leaving model-00003-of-00003.safetensors short by 195,860,016 bytes
+  # AND no optimizer/scheduler state, while the only other checkpoint had already been
+  # deleted. Keeping 3 means an interrupted save can no longer destroy the run's only
+  # resumable state. (The truncated 365 is under artifacts/ckpts/_quarantine/.)
+  save-total-limit: 3
 
 topo-params:
   alpha: 20

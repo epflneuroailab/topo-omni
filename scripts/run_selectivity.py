@@ -60,6 +60,18 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint", default=None,
                         help="checkpoint dir, or a name like 'checkpoint-146' under the "
                              "run dir. Default: the highest-numbered checkpoint-* there.")
+    parser.add_argument("--baseline", action="store_true",
+                        help="evaluate the UNTRAINED Qwen2.5-Omni-3B control instead of a "
+                             "checkpoint: identity (pass-through) cortical adaptors, so the "
+                             "sheet reflects the pretrained backbone with no topographic "
+                             "reorganisation. --checkpoint is ignored (load_topo_omni's "
+                             "baseline flag overrides the model id). --model_name still "
+                             "names the OUTPUT directory, so give it one of its own.")
+    parser.add_argument("--config_from", default=None,
+                        help="with --baseline: the run whose config.yml supplies the sheet "
+                             "layout and position-dir. The baseline has no run directory of "
+                             "its own, and the layout has to match the model it is a control "
+                             "for. Defaults to topo-omni-tiled32-4608.")
     parser.add_argument("--conditions", default=None,
                         help="comma-separated subset of conditions, e.g. 'faces'. "
                              "Default: every MARVi / text / pernet condition.")
@@ -72,7 +84,12 @@ if __name__ == "__main__":
 
     config = load_config(config_path)
 
-    run_config = load_config(os.path.join(CKPT_DIR, model_name, "config.yml"))
+    # The baseline has no run dir, so its geometry comes from the run it controls for.
+    config_run = args.config_from or ("topo-omni-tiled32-4608" if args.baseline else model_name)
+    run_config = load_config(os.path.join(CKPT_DIR, config_run, "config.yml"))
+    if args.baseline:
+        print(f"> BASELINE: untrained Qwen2.5-Omni-3B, identity adaptors; "
+              f"geometry from {config_run}/config.yml")
     
     marvi_conditions = [
         "faces",
@@ -100,6 +117,16 @@ if __name__ == "__main__":
         "multiple_demand_text_ODD",
         "theory_of_mind_text_EVEN",
         "theory_of_mind_text_ODD",
+
+        # Negative control (Moseley & Pulvermueller 2014, as used by TopoLM): single words,
+        # verbs vs nouns, one-sided in each direction. TopoLM found clusters for the
+        # CONCRETE contrast and none for the ABSTRACT one. Folder names must not contain
+        # 'language' / 'theory_of_mind' / 'multiple_demand': load_texts would then split the
+        # files on blank lines instead of one word per line.
+        "moseley_concrete_verbs",
+        "moseley_concrete_nouns",
+        "moseley_abstract_verbs",
+        "moseley_abstract_nouns",
     ]
 
     pernet_conditions = [
@@ -122,8 +149,13 @@ if __name__ == "__main__":
     # evaluated whatever $TOPO_OMNI_MODEL pointed at, i.e. a DIFFERENT run, and silently:
     # the only thing keyed to `model_name` was the OUTPUT directory, so the results landed
     # under the right name while describing the wrong model. Name the checkpoint here.
-    run_dir = f"{CKPT_DIR}/{model_name}"
-    if args.checkpoint:
+    run_dir = f"{CKPT_DIR}/{config_run}"
+    if args.baseline:
+        # load_topo_omni(baseline=True) resolves to Qwen/Qwen2.5-Omni-3B and ignores any
+        # model override, so there is no checkpoint to find -- and looking for one under a
+        # run dir the baseline does not have would abort the sweep.
+        ckpt = None
+    elif args.checkpoint:
         ckpt = (args.checkpoint if os.path.isabs(args.checkpoint)
                 or os.path.exists(args.checkpoint)
                 else f"{run_dir}/{args.checkpoint}")
@@ -132,12 +164,12 @@ if __name__ == "__main__":
                        key=lambda p: int(p.rsplit("-", 1)[1]))
         # no checkpoint-* means the weights sit at the top of the run dir
         ckpt = found[-1] if found else run_dir
-    if not os.path.exists(ckpt):
+    if ckpt is not None and not os.path.exists(ckpt):
         raise SystemExit(f"no such checkpoint: {ckpt}")
 
     condition_config["model"]["run_dir"] = run_dir
     condition_config["model"]["model"] = ckpt
-    print(f"> Model: {ckpt}")
+    print(f"> Model: {ckpt or 'Qwen/Qwen2.5-Omni-3B (baseline)'}")
 
     # The sheet layout is resolved at import time in spatial_utils and fixes the adaptor
     # width, the unit count and whether a front-end slot exists. Evaluating a tiled32 run
@@ -151,7 +183,8 @@ if __name__ == "__main__":
     condition_config["model"]["run_title"] = model_name
     condition_config["run"]["run_title"] = model_name
     condition_config["run"]["output_root"] = "results"
-    condition_config["run"]["do_pretrained"] = False
+    # read by selectivity/run.py as load_topo_omni(..., baseline=do_pretrained)
+    condition_config["run"]["do_pretrained"] = args.baseline
     condition_config["run"]["overwrite"] = args.overwrite
 
     conditions = marvi_conditions + text_conditions + pernet_conditions
