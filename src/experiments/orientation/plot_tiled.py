@@ -79,6 +79,9 @@ def main():
                          "dominates the raw count on a sparse sheet -- at ckpt-312 it held "
                          "17 of 22 pinwheels off 388 valid units, against 20 in its own "
                          "shuffle -- so restricting is often the honest thing to do.")
+    ap.add_argument("--no-counts", action="store_true",
+                    help="drop the per-slot pinwheel count from the titles; "
+                         "the maps and the dots are unchanged.")
     args = ap.parse_args()
 
     probe = slot_window(np.zeros(S.num_units), S, 0, args.window).shape
@@ -165,7 +168,8 @@ def main():
                         va="center", fontsize=7, color="0.5"); continue
             draw_tile(ax, maps[k], ctrs[k])
             shown = n if which == "real" else n_sh
-            ax.set_title(f"slot {sl}   {shown:.0f} pw", fontsize=7)
+            ax.set_title(f"slot {sl}" if args.no_counts
+                         else f"slot {sl}   {shown:.0f} pw", fontsize=7)
         tag = ("orientation preference per vision slot" if which == "real" else
                "SPATIALLY SHUFFLED control — same units, positions permuted within tile")
         fig.suptitle(f"{args.run} — {tag} (64x64 tile), smoothing {args.width}px\n"
@@ -192,7 +196,9 @@ def main():
             draw_tile(ax, maps[k], ctrs[k])
             ax.set_xticks([]); ax.set_yticks([])
             npw = rows[k][2] if lab == "real" else rows[k][4]
-            ax.set_title(f"slot {rows[k][0]} — {lab}   {npw:.0f} pw", fontsize=9)
+            ax.set_title(f"slot {rows[k][0]} — {lab}" if args.no_counts
+                         else f"slot {rows[k][0]} — {lab}   {npw:.0f} pw",
+                         fontsize=9)
     fig.suptitle(f"{args.run}: real vs spatially shuffled, same tiles and same detector\n"
                  f"If the top row is structure, the bottom row must look different.",
                  fontsize=10)

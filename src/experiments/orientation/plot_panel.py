@@ -386,6 +386,12 @@ def main():
                          "this sheet -- at matched Lambda the UNTRAINED step-0 model "
                          "scores 298 against the trained model's 254 -- so a figure that "
                          "annotates it invites a conclusion the number does not support.")
+    ap.add_argument("--no-counts", action="store_true",
+                    help="keep the pinwheel dots but drop every COUNT: none in the title, "
+                         "no +/- tally legend. Distinct from --no-markers, which also "
+                         "removes the dots. Use this when the singularities are worth "
+                         "showing but the number is not -- see --no-markers on why the "
+                         "count is not evidence on this sheet.")
     ap.add_argument("--figsize", type=float, nargs=2, default=None)
     args = ap.parse_args()
 
@@ -460,7 +466,7 @@ def main():
     # pinwheel count in the title after the dots have been removed.
     if args.title is not None:
         title = args.title
-    elif args.pinwheels and not args.no_markers:
+    elif args.pinwheels and not args.no_markers and not args.no_counts:
         title = f"{layer_tag} \u2014 {total} pinwheels"
     else:
         title = f"{layer_tag}"
@@ -473,7 +479,7 @@ def main():
 
     if args.style in ("heatmap", "both"):
         plot_panel(disp_ori, [] if args.no_markers else disp_centres, _p("_heatmap"),
-                   lam_px=lam, stride=stride, show_counts=not args.no_markers,
+                   lam_px=lam, stride=stride, show_counts=not (args.no_markers or args.no_counts),
                    title=title, figsize=figsize,
                    cbar_orientation=None if args.cbar == "auto" else args.cbar,
                    scalebar_px=_bar_px(args, lam),
@@ -485,7 +491,7 @@ def main():
         field = disp_raw if args.raw else disp_ori
         shown = np.ones_like(disp_valid) if args.all_units else disp_valid
         plot_panel_scatter(field, shown, [] if args.no_markers else disp_centres,
-                           _p("_scatter"), show_counts=not args.no_markers, title=title,
+                           _p("_scatter"), show_counts=not (args.no_markers or args.no_counts), title=title,
                            figsize=figsize, marker=args.marker,
                            marker_scale=args.marker_scale, jitter=args.jitter,
                            alpha=args.alpha, edge=args.edge,

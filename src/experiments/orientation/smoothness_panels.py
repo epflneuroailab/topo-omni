@@ -445,8 +445,8 @@ def plot_metric_lines(per_seed: Dict[str, Dict[int, np.ndarray]],
     """
     # Same palette as the bars, and the whole TDANN family is dashed so the two model
     # families stay separable when their curves overlap.
-    colours = {"Topo-Omni": "#5B2C9E", "Topo-Omni Task Only": "#9B7FC4",
-               "Topo-Omni Step 0": "#B69ED4", "Topo-Omni Untrained": "#C3B2DC",
+    colours = {"Topo-Omni": "#007FFF", "Topo-Omni Task Only": "#7FBFFF",
+               "Topo-Omni Step 0": "#B3D9FF", "Topo-Omni Untrained": "#D9ECFF",
                "TDANN": "#C25E00", "Task Only": "#E3A669", "Unoptimized": "#EBC9A4"}
     TDANN_FAMILY_NAMES = {"TDANN", "Task Only", "Unoptimized"}
     fig, ax = plt.subplots(figsize=figsize)
@@ -502,7 +502,8 @@ def plot_metric_lines(per_seed: Dict[str, Dict[int, np.ndarray]],
 # (un-swapped) positions, whereas Topo-Omni's sheet coordinates are fixed by coords.npy
 # for every condition, so only the weights differ.
 BAR_GROUPS = (
-    ("Topo-Omni", ("#5B2C9E", "#9B7FC4", "#B69ED4", "#D9CEEA"),
+    # Blue family, #007FFF for the model itself, lightening by condition.
+    ("Topo-Omni", ("#007FFF", "#7FBFFF", "#B3D9FF", "#D9ECFF"),
      (("Topo-Omni", "Spatial\n+ Task"),
       ("Topo-Omni Task Only", "Task\nOnly"),
       # Step 0 sits between Task Only and Untrained on purpose: it keeps the PRETRAINED
@@ -523,8 +524,22 @@ TOPO_UNTRAINED_NOTE = ("Both 'Untrained' bars are randomly initialised weights. 
 
 
 def plot_smoothness_bars(summaries: Dict[str, dict], macaque, title: str,
-                         savepath=None, approx: bool = False, figsize=(6.6, 4.1)):
-    """TDANN Fig. 2E/2G-style bars, grouped into the Topo-Omni and TDANN families."""
+                         savepath=None, approx: bool = False, figsize=None, include=None):
+    """TDANN Fig. 2E/2G-style bars, grouped into the Topo-Omni and TDANN families.
+
+    ``include`` restricts the bars to those model names and drops the other slots entirely.
+    Passing a filtered ``summaries`` instead would not work: a group member missing from
+    ``summaries`` is drawn as an "n/a" placeholder, which is right for missing data and
+    wrong for a bar that was deliberately left out. Colours stay tied to each member's
+    position in its group, so a bar keeps its colour whatever else is shown.
+    """
+    wanted = (lambda k: True) if include is None else (lambda k: k in include)
+    if figsize is None:
+        # Width per bar matches the full 7-bar panel (6.6 in), so a 3-bar panel is not
+        # stretched into three very wide bars.
+        n_bars = sum(wanted(k) for _, _, members in BAR_GROUPS for k, _ in members)
+        n_groups = sum(any(wanted(k) for k, _ in members) for _, _, members in BAR_GROUPS)
+        figsize = (max(3.0, 0.75 * (n_bars + n_groups - 1) + 0.6), 4.1)
     fig, ax = plt.subplots(figsize=figsize)
     xt, xl, spans, placed = [], [], [], set()
     x, gap = 0.0, 1.0
@@ -545,15 +560,18 @@ def plot_smoothness_bars(summaries: Dict[str, dict], macaque, title: str,
         placed.add(key)
 
     for gname, palette, members in BAR_GROUPS:
-        start = x
+        start, drawn = x, 0
         for (key, blabel), colour in zip(members, palette):
+            if not wanted(key):
+                continue
             draw(x, key, colour)
-            xt.append(x); xl.append(blabel); x += 1.0
-        spans.append((gname, start, x - 1.0))
-        x += gap
+            xt.append(x); xl.append(blabel); x += 1.0; drawn += 1
+        if drawn:
+            spans.append((gname, start, x - 1.0))
+            x += gap
 
     # Anything the groups did not cover is still drawn, rather than silently dropped.
-    leftover = [k for k in summaries if k not in placed]
+    leftover = [k for k in summaries if k not in placed and wanted(k)]
     if leftover:
         print(f"  ! bars not in BAR_GROUPS, appended as 'other': {', '.join(leftover)}")
         start = x
@@ -577,7 +595,8 @@ def plot_smoothness_bars(summaries: Dict[str, dict], macaque, title: str,
     ax.set_xlim(-0.7, x - 0.3)
     ax.set_ylabel("Smoothness")
     ax.set_title(title, fontsize=10)
-    tops = [s["mean"] + s["spread"] for s in summaries.values() if np.isfinite(s["mean"])]
+    tops = [s["mean"] + s["spread"] for k, s in summaries.items()
+            if wanted(k) and np.isfinite(s["mean"])]
     tops += [v for _, v in refs if np.isfinite(v)]
     top = max(1.02, (max(tops) if tops else 1.0) * 1.15)
     ax.set_ylim(0, top)
@@ -662,7 +681,17 @@ def main():
                          "reference. Not redistributed by TDANN, so it must be supplied; "
                          "without it the reference falls back to a figure-read constant.")
     ap.add_argument("--num-samples", type=int, default=20)
+    ap.add_argument("--line-models", type=str, default=None,
+                    help="comma-separated model names drawn in the Delta-vs-distance line "
+                         "plots, e.g. 'Topo-Omni'. The macaque reference is always drawn. "
+                         "Default: every model computed.")
+    ap.add_argument("--bar-models", type=str, default=None,
+                    help="comma-separated model names drawn in the smoothness and plateau "
+                         "bar plots, e.g. 'Topo-Omni,Topo-Omni Task Only,TDANN'. Default: "
+                         "every model. Stats and the .npz always cover every model.")
     args = ap.parse_args()
+    _names = lambda s: None if s is None else [t.strip() for t in s.split(",") if t.strip()]
+    line_models, bar_models = _names(args.line_models), _names(args.bar_models)
 
     outdir = Path(args.outdir) if args.outdir else Path(args.stats).parent / "panels"
     outdir.mkdir(parents=True, exist_ok=True)
@@ -793,6 +822,13 @@ def main():
              " (decoded from the supplied Livingstone 1984 Fig. 27B)"))
 
     # --- summarise, plot, test
+    # A misspelt name would otherwise just drop that series without a word.
+    computed = set(per_model["orientation"])
+    for flag, sel in (("--line-models", line_models), ("--bar-models", bar_models)):
+        unknown = sorted(set(sel or ()) - computed)
+        if unknown:
+            raise SystemExit(f"{flag}: not computed in this run: {unknown}; "
+                             f"available: {sorted(computed)}")
     all_lines = []
     titles = {"orientation": "Orientation", "sf": "Spatial frequency", "color": "Colour"}
     for tag, (panel, ylabel, _circ, normalise) in METRICS.items():
@@ -806,7 +842,8 @@ def main():
         plot_smoothness_bars(summaries, sm_refs,
                              f"{titles[tag]} map smoothness",
                              approx=(tag == "color" and colour_is_figure_read),
-                             savepath=outdir / f"panel{panel}_smoothness_{tag}.png")
+                             savepath=outdir / f"panel{panel}_smoothness_{tag}.png",
+                             include=bar_models)
 
         # Chance-normalised plateau. Reported as its own panel because it is a different
         # statistic, not a rescaling of the bars above (smoothness cannot change under
@@ -830,8 +867,11 @@ def main():
         plot_smoothness_bars(ratios, pl_refs,
                              f"{titles[tag]}: plateau / chance",
                              approx=False,
-                             savepath=outdir / f"panel{panel}_plateau_{tag}.png")
-        plot_metric_lines(per_model[tag], per_model[tag + "_shuffled"], x_by_model[tag],
+                             savepath=outdir / f"panel{panel}_plateau_{tag}.png",
+                             include=bar_models)
+        line_set = {n: v for n, v in per_model[tag].items()
+                    if line_models is None or n in line_models}
+        plot_metric_lines(line_set, per_model[tag + "_shuffled"], x_by_model[tag],
                           macaque_curves[tag], ylabel,
                           f"{titles[tag]}: $\\Delta$ preference vs distance", normalise,
                           savepath=outdir / f"panel{panel}_lines_{tag}.png")
