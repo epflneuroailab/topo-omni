@@ -91,7 +91,9 @@ def plot_retinotopy(pref_ecc, pref_ang, tuned, ecc_frac, ang_deg, coords, sheet_
 
     assert pref_ecc.size == H * W == tuned.size, "sheet_shape does not match n_units"
 
-    smoother = NeuronSmoothingConv(fwhm_mm=1.4, resolution_mm=1.0)
+    smoother = NeuronSmoothingConv(
+        fwhm_mm=float(cfg.stats.get("fwhm_mm", 1.4)) if "stats" in cfg else 1.4,
+        resolution_mm=float(cfg.stats.get("resolution_mm", 1.0)) if "stats" in cfg else 1.0)
     ecc_2d = smoother(coords, pref_ecc[np.newaxis,:]).squeeze()
     ang_2d = smoother(coords, pref_ang[np.newaxis,:]).squeeze()
 
@@ -113,7 +115,7 @@ def plot_retinotopy(pref_ecc, pref_ang, tuned, ecc_frac, ang_deg, coords, sheet_
     fig, (ax_e, ax_a) = plt.subplots(1, 2, figsize=figsize)
     panels = [
         (ax_e, ecc_2d, ecc_cmap, len(ecc_frac), ecc_frac,
-         "preferred ecc (frac of radius)", "Eccentricity", "{:.2f}"),
+         "preferred eccentricity (deg)", "Eccentricity", "{:.2f}"),
         (ax_a, ang_2d, ang_cmap, len(ang_deg), ang_deg,
          "preferred angle (deg)", "Polar angle", "{:.0f}"),
     ]
@@ -157,7 +159,7 @@ def plot_retinotopy_scatter(pref_ecc, pref_ang, tuned, ecc_frac, ang_deg, coords
     fig, (ax_e, ax_a) = plt.subplots(1, 2, figsize=figsize)
     panels = [
         (ax_e, pref_ecc, ecc_cmap, len(ecc_frac), ecc_frac,
-         "preferred ecc (frac of radius)", "Eccentricity", "{:.2f}"),
+         "preferred eccentricity (deg)", "Eccentricity", "{:.2f}"),
         (ax_a, pref_ang, ang_cmap, len(ang_deg), ang_deg,
          "preferred angle (deg)", "Polar angle", "{:.0f}"),
     ]
@@ -315,8 +317,26 @@ def main():
         print(f"> Loading cached cortical sheets from: {cache_path}")
         cortical_sheets = np.load(cache_path)
 
-    # coords_lm = unified_grid_coords()
-    coords_lm = np.load("src/neighborhoods/model=qwen2-5omni-3b-unified-frontend-20-v4_radius=20_neighborhoods=20_coords=42/coords.npy")
+    # Coordinates must be the ones the run was TRAINED with. `build_sheet_coordinates`
+    # shuffles every unit within its layer block, so the identity grid from
+    # `unified_grid_coords()` puts only 94 of tiled32's 460,800 units back where they
+    # belong, and another run's coords file has the wrong unit count outright (the
+    # 309x512 strip has 158,208). Either way the map is scrambled rather than wrong-looking,
+    # so take the path from the config and fail loudly if it does not match the sheet.
+    _coords_path = cfg.stats.get("coords_path", None) if "stats" in cfg else None
+    if _coords_path:
+        coords_lm = np.load(_coords_path)
+        print(f"> Unit coordinates: {_coords_path} {coords_lm.shape}")
+    else:
+        coords_lm = np.load("src/neighborhoods/model=qwen2-5omni-3b-unified-frontend-20-v4_radius=20_neighborhoods=20_coords=42/coords.npy")
+        print("> WARNING: no stats.coords_path in the config; falling back to "
+              "the 309x512 strip run's coords. This is only correct for the run it came from.")
+    from src.models.spatial_utils import DEFAULT_SHEET_LAYOUT as _S
+    if coords_lm.shape[0] != _S.num_units:
+        raise SystemExit(
+            f"coords have {coords_lm.shape[0]} units but the active sheet layout "
+            f"({_S.mode}, {_S.n_row}x{_S.n_col}) has {_S.num_units}. Set "
+            f"TOPO_SHEET_LAYOUT and stats.coords_path to the same run.")
 
     # (N_total, n_units) -> (n_ecc, n_ang, n_exemplars, n_units)
     cortical_sheets = cortical_sheets.reshape(n_ecc, n_ang, n_exemplars, cortical_sheets.shape[-1])

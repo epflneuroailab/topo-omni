@@ -35,6 +35,27 @@ from scipy.stats import f_oneway, false_discovery_control
 from qwen_omni_utils import process_mm_info
 from src.core.model_loading import load_topo_omni, unified_grid_coords
 from src.utils.smoothing import NeuronSmoothingConv
+from src.models.spatial_utils import DEFAULT_SHEET_LAYOUT as SHEET
+
+# The vision encoder's extent on the sheet, derived from the active layout. These were
+# HARDCODED as 144 / 256 -- the old 309x512 strip's thinker_rows and n_col//2. On tiled32
+# (800x576, thinker_rows 288, n_col//2 288) those literals crop 144 rows of LANGUAGE/
+# COGNITIVE units into the map and cut 32 columns off the vision band, so the published
+# panel was neither the vision encoder nor the whole sheet. Same stale constants that
+# marvi.py's get_selectivity_mask was already fixed for.
+def _vision_band(arr2d):
+    """Blank the audio half and crop to the vision encoder, in the post-rot90 frame."""
+    thk, mid = SHEET.thinker_rows, SHEET.n_col // 2
+    arr2d[thk:, mid:] = np.nan          # audio band
+    return arr2d[thk:, :mid]            # vision band only (drops the thinker rows)
+
+
+# The config resolves ${oc.env:STIMULI_DIR} through OmegaConf, which reads the REAL
+# environment -- not the repo .env. run_angle.py and run.py both load it here; this
+# module did not, so any config using an env interpolation died with
+# "Environment variable 'STIMULI_DIR' not found" unless the caller happened to export it.
+from dotenv import load_dotenv
+load_dotenv()
 
 
 def _real_tick_cbar(cbar, real_values, label, n_ticks=6, fmt="{:.2g}"):
@@ -80,10 +101,11 @@ def plot_retinotopy(pref_ecc, tuned, ecc_frac, coords, sheet_shape,
     ecc_2d = np.rot90(ecc_2d, k=1)
     mask_2d = np.rot90(mask_2d, k=1)
 
-    ecc_2d[144:, 256:] = np.nan
-    
-    # mask_2d = np.zeros_like(mask_2d, dtype=bool)  # --- IGNORE ---
-    # ecc_2d[:144, :] = np.nan
+    # Crop to the vision band, exactly as run_angle does, so the polar-angle and
+    # eccentricity panels cover the same units and can be read against each other. The
+    # thinker-blanking line that used to sit here commented out did the same job by hand.
+    mask_2d = None
+    ecc_2d = _vision_band(ecc_2d)
 
     fig, ax_e = plt.subplots(1, 1, figsize=figsize)
     ax_e.set_facecolor("0.92")
@@ -96,7 +118,7 @@ def plot_retinotopy(pref_ecc, tuned, ecc_frac, coords, sheet_shape,
         xticklabels=False, yticklabels=False,
     )
     _real_tick_cbar(hm.collections[0].colorbar, ecc_frac,
-                    "preferred ecc (frac of radius)", fmt="{:.2f}")
+                    "preferred eccentricity (deg)", fmt="{:.2f}")
     ax_e.set_title("Eccentricity")
     ax_e.set_xlabel("")
     ax_e.set_ylabel("")
@@ -128,7 +150,7 @@ def plot_retinotopy_scatter(pref_ecc, tuned, ecc_frac, coords,
                       c=pref_ecc[tuned], cmap=ecc_cmap,
                       vmin=-0.5, vmax=len(ecc_frac) - 0.5, s=point_size, linewidths=0)
     cbar = fig.colorbar(sc, ax=ax_e, shrink=0.6)
-    _real_tick_cbar(cbar, ecc_frac, "preferred ecc (frac of radius)", fmt="{:.2f}")
+    _real_tick_cbar(cbar, ecc_frac, "preferred eccentricity (deg)", fmt="{:.2f}")
     ax_e.set_aspect("equal")
     ax_e.set_title("Eccentricity")
     ax_e.set_xlabel("")
@@ -268,13 +290,34 @@ def main():
         print(f"> Loading cached cortical sheets from: {cache_path}")
         cortical_sheets = np.load(cache_path)
 
-    coords_lm = unified_grid_coords()
+    # Coordinates must be the ones the run was TRAINED with. `build_sheet_coordinates`
+    # shuffles every unit within its layer block, so the identity grid from
+    # `unified_grid_coords()` puts only 94 of tiled32's 460,800 units back where they
+    # belong, and another run's coords file has the wrong unit count outright (the
+    # 309x512 strip has 158,208). Either way the map is scrambled rather than wrong-looking,
+    # so take the path from the config and fail loudly if it does not match the sheet.
+    _coords_path = cfg.stats.get("coords_path", None) if "stats" in cfg else None
+    if _coords_path:
+        coords_lm = np.load(_coords_path)
+        print(f"> Unit coordinates: {_coords_path} {coords_lm.shape}")
+    else:
+        coords_lm = unified_grid_coords()
+        print("> WARNING: no stats.coords_path in the config; falling back to "
+              "the identity grid. This is only correct for the run it came from.")
+    from src.models.spatial_utils import DEFAULT_SHEET_LAYOUT as _S
+    if coords_lm.shape[0] != _S.num_units:
+        raise SystemExit(
+            f"coords have {coords_lm.shape[0]} units but the active sheet layout "
+            f"({_S.mode}, {_S.n_row}x{_S.n_col}) has {_S.num_units}. Set "
+            f"TOPO_SHEET_LAYOUT and stats.coords_path to the same run.")
 
     # (N_total, n_units) -> (n_ecc, n_exemplars, n_units)
     cortical_sheets = cortical_sheets.reshape(n_ecc, n_exemplars, cortical_sheets.shape[-1])
     print(f"> Reshaped cortical sheets to: {cortical_sheets.shape}")
 
-    smoother = NeuronSmoothingConv(fwhm_mm=4.0, resolution_mm=1.0)
+    smoother = NeuronSmoothingConv(
+        fwhm_mm=float(cfg.stats.get("fwhm_mm", 4.0)) if "stats" in cfg else 4.0,
+        resolution_mm=float(cfg.stats.get("resolution_mm", 1.0)) if "stats" in cfg else 1.0)
     smoothed_sheet = smoother(coords_lm, cortical_sheets.reshape(-1, cortical_sheets.shape[-1]))
     
     pref_ecc, tuned = anova_retinotopy(smoothed_sheet.reshape(n_ecc, n_exemplars, -1))

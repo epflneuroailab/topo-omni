@@ -1,0 +1,36 @@
+# Retinotopy (polar angle + eccentricity) for the TILED-32 run at checkpoint-730 -- the
+# checkpoint every other number in the paper comes from. The published Fig. 2e-f was
+# measured on the old 309x512 strip model and is not comparable to this sheet.
+#
+# REQUIRES TOPO_SHEET_LAYOUT=tiled32. The layout is resolved at import time and fixes the
+# unit count; the 460,800-unit coords below are rejected by any other geometry, and
+# run_angle/run_ecc now check that explicitly rather than scrambling the map.
+run:
+  run_title: tiled32-4608-ckpt730
+  category_name: retinotopy
+  output_root: ${oc.env:SAVE_DIR,results}
+  do_pretrained: false
+  overwrite: false
+
+model:
+  device: cuda
+  model: artifacts/ckpts/topo-omni-tiled32-4608
+
+data:
+  mode: image
+  stimuli_root: ${oc.env:STIMULI_DIR}/retinotopy/output
+  batch_size: 1
+  lm_reduce: mean
+  vis_reduce: mean
+
+stats:
+  alpha: 0.05
+  smooth: true
+  # Was hardcoded per script (2.0 in run_angle, 4.0 in run_ecc, 1.4 in run). One value for
+  # both maps so the polar-angle and eccentricity panels are smoothed identically and can
+  # be read against each other; 3.0 matches the selectivity sweeps on this sheet.
+  fwhm_mm: 3.0
+  resolution_mm: 1.0
+  # The coords this run was TRAINED with. Without them the units are placed by an identity
+  # grid that build_sheet_coordinates never used, and the map is scrambled silently.
+  coords_path: src/neighborhoods/model=qwen2-5omni-3b-tiled32-4608-v7_radius=dynamic_coords=42/coords.npy

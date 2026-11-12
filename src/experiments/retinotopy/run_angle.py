@@ -27,6 +27,20 @@ from scipy.stats import f_oneway, false_discovery_control
 from qwen_omni_utils import process_mm_info
 from src.core.model_loading import load_topo_omni, unified_grid_coords
 from src.utils.smoothing import NeuronSmoothingConv
+from src.models.spatial_utils import DEFAULT_SHEET_LAYOUT as SHEET
+
+# The vision encoder's extent on the sheet, derived from the active layout. These were
+# HARDCODED as 144 / 256 -- the old 309x512 strip's thinker_rows and n_col//2. On tiled32
+# (800x576, thinker_rows 288, n_col//2 288) those literals crop 144 rows of LANGUAGE/
+# COGNITIVE units into the map and cut 32 columns off the vision band, so the published
+# panel was neither the vision encoder nor the whole sheet. Same stale constants that
+# marvi.py's get_selectivity_mask was already fixed for.
+def _vision_band(arr2d):
+    """Blank the audio half and crop to the vision encoder, in the post-rot90 frame."""
+    thk, mid = SHEET.thinker_rows, SHEET.n_col // 2
+    arr2d[thk:, mid:] = np.nan          # audio band
+    return arr2d[thk:, :mid]            # vision band only (drops the thinker rows)
+
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -79,10 +93,8 @@ def plot_angle(pref_ang, tuned, ang_deg, coords, sheet_shape,
     ang_2d = np.rot90(ang_2d, k=1)
     mask_2d = np.rot90(mask_2d, k=1)
 
-    ang_2d[144:, 256:] = np.nan
-
     mask_2d = None
-    ang_2d = ang_2d[144:, :256]
+    ang_2d = _vision_band(ang_2d)
 
 
     fig, ax_a = plt.subplots(1, 1, figsize=figsize)
@@ -266,14 +278,34 @@ def main():
         print(f"> Loading cached cortical sheets from: {cache_path}")
         cortical_sheets = np.load(cache_path)
 
-    # coords_lm = unified_grid_coords()
-    coords_lm = np.load("src/neighborhoods/model=qwen2-5omni-3b-unified-frontend-20-v4_radius=20_neighborhoods=20_coords=42/coords.npy")
+    # Coordinates must be the ones the run was TRAINED with. `build_sheet_coordinates`
+    # shuffles every unit within its layer block, so the identity grid from
+    # `unified_grid_coords()` puts only 94 of tiled32's 460,800 units back where they
+    # belong, and another run's coords file has the wrong unit count outright (the
+    # 309x512 strip has 158,208). Either way the map is scrambled rather than wrong-looking,
+    # so take the path from the config and fail loudly if it does not match the sheet.
+    _coords_path = cfg.stats.get("coords_path", None) if "stats" in cfg else None
+    if _coords_path:
+        coords_lm = np.load(_coords_path)
+        print(f"> Unit coordinates: {_coords_path} {coords_lm.shape}")
+    else:
+        coords_lm = np.load("src/neighborhoods/model=qwen2-5omni-3b-unified-frontend-20-v4_radius=20_neighborhoods=20_coords=42/coords.npy")
+        print("> WARNING: no stats.coords_path in the config; falling back to "
+              "the 309x512 strip run's coords. This is only correct for the run it came from.")
+    from src.models.spatial_utils import DEFAULT_SHEET_LAYOUT as _S
+    if coords_lm.shape[0] != _S.num_units:
+        raise SystemExit(
+            f"coords have {coords_lm.shape[0]} units but the active sheet layout "
+            f"({_S.mode}, {_S.n_row}x{_S.n_col}) has {_S.num_units}. Set "
+            f"TOPO_SHEET_LAYOUT and stats.coords_path to the same run.")
 
     # (N_total, n_units) -> (n_ang, n_exemplars, n_units)
     cortical_sheets = cortical_sheets.reshape(n_ang, n_exemplars, cortical_sheets.shape[-1])
     print(f"> Reshaped cortical sheets to: {cortical_sheets.shape}")
 
-    smoother = NeuronSmoothingConv(fwhm_mm=2.0, resolution_mm=1.0)
+    smoother = NeuronSmoothingConv(
+        fwhm_mm=float(cfg.stats.get("fwhm_mm", 2.0)) if "stats" in cfg else 2.0,
+        resolution_mm=float(cfg.stats.get("resolution_mm", 1.0)) if "stats" in cfg else 1.0)
     smoothed_sheet = smoother(coords_lm, cortical_sheets.reshape(-1, cortical_sheets.shape[-1]))
 
     pref_ang, tuned = anova_retinotopy(smoothed_sheet.reshape(n_ang, n_exemplars, -1))
