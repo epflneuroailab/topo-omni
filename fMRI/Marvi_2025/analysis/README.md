@@ -23,7 +23,8 @@ Branch B: [`concatenated_glm.py`](concatenated_glm.py) (08) →
 [`project_parcels_to_surface.py`](project_parcels_to_surface.py) (12/18) →
 [`visualize_native_surface.py`](visualize_native_surface.py) (10/19).
 
-Fig. 1b: [`plot_figure_1b_parcels.py`](plot_figure_1b_parcels.py).
+Fig. 1b: [`plot_figure_1b_parcels.py`](plot_figure_1b_parcels.py). `--masks-only` writes the
+same parcels as binary fsaverage6 masks instead of the figure.
 
 Which numbers are frozen CI goldens vs one-off spot-checks: see the reproducibility
 table in [`../README.md`](../README.md).

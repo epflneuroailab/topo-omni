@@ -132,3 +132,38 @@ def test_label_map_vertex_counts_golden(include_loc):
         roi_map = m.build_roi_map(rois, fs[f"pial_{side}"], n, hemi, _DATASET / "data" / "PARCELS")
         counts = {r["name"]: int(np.sum(roi_map == r["value"])) for r in rois}
         assert counts == expected[hemi], (hemi, counts)
+
+
+# --masks-only (2026-09-29): full region extents, no overlap resolution, so each mask contains
+# the panel's region (faces and right scenes, never overwritten, match GOLDEN_COUNTS exactly).
+GOLDEN_MASK_COUNTS = {
+    "L": {"scenes": 495, "loc": 1047, "vwfa": 669, "faces": 327, "bodies": 546},
+    "R": {"scenes": 362, "loc": 611, "vwfa": 0, "faces": 630, "bodies": 263},
+}
+
+
+def test_every_mask_parcel_resolves_in_the_vendored_parcels():
+    m = _load()
+    parcels = _DATASET / "data" / "PARCELS"
+    for roi in m.MASK_EXTRA_ROIS:
+        for name in roi["parcels_L"] + roi["parcels_R"]:
+            assert m.find_parcel_path(name, parcels) is not None, name
+
+
+@pytest.mark.skipif(not _fsaverage6_cached(), reason="nilearn or cached fsaverage6 surfaces unavailable")
+def test_roi_masks_vertex_counts_golden(tmp_path):
+    import nibabel as nib
+    from nilearn import datasets
+    m = _load()
+    fs = datasets.fetch_surf_fsaverage(mesh="fsaverage6")
+    manifest = m.save_roi_masks(tmp_path, _DATASET / "data" / "PARCELS", fs, "fsaverage6")
+    for hemi in ("L", "R"):
+        counts = {name: r["n_vertices"][hemi] for name, r in manifest["regions"].items()}
+        assert counts == GOLDEN_MASK_COUNTS[hemi], (hemi, counts)
+    arrays = np.load(tmp_path / "roi_masks_space-fsaverage6.npz")
+    g = nib.load(tmp_path / "roi-faces_space-fsaverage6_hemi-L_mask.func.gii").darrays[0].data
+    assert g.dtype == np.uint8 and g.shape == (40962,)
+    assert np.array_equal(g.astype(bool), arrays["roi-faces_hemi-L"])
+    # A region mask is the union of its parcel masks.
+    union = arrays["parcel-ffa_hemi-R"] | arrays["parcel-ofa_hemi-R"] | arrays["parcel-sts_hemi-R"]
+    assert np.array_equal(union, arrays["roi-faces_hemi-R"])

@@ -28,7 +28,9 @@ palette above. The label maps are identical to the dev script's (checked 2026-09
 
 Writes into --output-dir:
   roi_parcels_<tag>_{lh,rh}_{inflated,pial}.html  and  roi_parcels_<tag>_legend.png
-with <tag> the active regions, e.g. ``scenes-loc-vwfa-faces``.
+with <tag> the active regions, e.g. ``scenes-loc-vwfa-faces``. With --masks-only it writes
+binary surface masks instead (one per region, incl. bodies/EBA, and one per parcel, without
+the overlap resolution of the panel); see ``save_roi_masks``.
 
 Render step — not golden-mastered; the label maps are pinned by vertex counts in
 tests/test_plot_figure_1b_parcels.py. Requires nilearn (pinned 0.12.1), which fetches the
@@ -105,6 +107,16 @@ ROI_DEFS = [
     },
 ]
 
+# Regions exported by --masks-only in addition to ROI_DEFS. Not drawn in the panel.
+MASK_EXTRA_ROIS = [
+    {
+        'name': 'bodies',
+        'label': 'Bodies (EBA)',
+        'parcels_L': ['lh.eba'],
+        'parcels_R': ['rh.eba'],
+    },
+]
+
 # 'vwfa' before 'julian': the vwfa/ copy is 3D, julian/lh.vwfa.nii.gz is 4D (256,256,256,1).
 PARCEL_SUBDIRS = ['vwfa', 'julian', 'language', 'tom', 'md', 'speech']
 
@@ -139,8 +151,6 @@ def build_roi_map(roi_defs: list, surf_path, n_vertices: int, hemi: str,
 
     Later regions overwrite earlier ones where they overlap.
     """
-    from nilearn import surface
-
     parcel_key = 'parcels_L' if hemi == 'L' else 'parcels_R'
     roi_map = np.zeros(n_vertices, dtype=float)
 
@@ -151,22 +161,29 @@ def build_roi_map(roi_defs: list, surf_path, n_vertices: int, hemi: str,
 
         merged = np.zeros(n_vertices, dtype=bool)
         for parcel_name in parcel_names:
-            parcel_path = find_parcel_path(parcel_name, parcels_dir)
-            if parcel_path is None:
-                raise FileNotFoundError(f'Parcel {parcel_name} not found under {parcels_dir}')
-            surf_data = surface.vol_to_surf(
-                str(parcel_path),
-                surf_path,
-                interpolation='nearest_most_frequent',
-                radius=3.0,
-            )
-            surf_data = np.asarray(surf_data).squeeze()  # guard against 4D inputs
-            merged |= surf_data > 0
+            merged |= project_parcel(parcel_name, surf_path, parcels_dir)
 
         roi_map[merged] = roi['value']
         logger.info(f'  {roi["label"]} ({hemi}H): {int(merged.sum())} vertices')
 
     return np.where(roi_map > 0, roi_map, np.nan)
+
+
+def project_parcel(parcel_name: str, surf_path, parcels_dir: Path) -> np.ndarray:
+    """One MNI parcel volume projected to the surface; boolean per vertex."""
+    from nilearn import surface
+
+    parcel_path = find_parcel_path(parcel_name, parcels_dir)
+    if parcel_path is None:
+        raise FileNotFoundError(f'Parcel {parcel_name} not found under {parcels_dir}')
+    surf_data = surface.vol_to_surf(
+        str(parcel_path),
+        surf_path,
+        interpolation='nearest_most_frequent',
+        radius=3.0,
+    )
+    surf_data = np.asarray(surf_data).squeeze()  # guard against 4D inputs
+    return surf_data > 0
 
 
 def compute_roi_contours(roi_map: np.ndarray, faces: np.ndarray) -> np.ndarray:
@@ -208,6 +225,68 @@ def save_legend_png(roi_defs: list, output_path: Path) -> None:
     plt.close(fig)
 
 
+def save_mask_gifti(mask: np.ndarray, output_path: Path) -> None:
+    """0/1 uint8 GIFTI, one value per vertex."""
+    darray = nib.gifti.GiftiDataArray(mask.astype(np.uint8), intent='NIFTI_INTENT_NONE',
+                                      datatype='NIFTI_TYPE_UINT8')
+    nib.save(nib.gifti.GiftiImage(darrays=[darray]), str(output_path))
+
+
+def save_roi_masks(output_dir: Path, parcels_dir: Path, fsaverage, space: str) -> dict:
+    """One binary surface mask per region and per parcel, both hemispheres.
+
+    Same projection as the panel (pial surface, nearest_most_frequent, radius 3 mm), but no
+    overwrite: each mask is its region's full extent, so masks can overlap. A region with no
+    parcel in a hemisphere (VWFA right) gets an all-zero mask.
+
+    Writes roi-<region>_space-<space>_hemi-<H>_mask.func.gii,
+    parcel-<parcel>_space-<space>_hemi-<H>_mask.func.gii, all of them in
+    roi_masks_space-<space>.npz, and roi_masks_space-<space>.json (vertex counts, sources).
+    Returns the manifest.
+    """
+    import json
+
+    regions = ROI_DEFS + MASK_EXTRA_ROIS
+    arrays = {}
+    manifest = {
+        'space': space,
+        'projection': 'nilearn.surface.vol_to_surf on the pial surface, '
+                      "interpolation='nearest_most_frequent', radius=3.0; vertex in mask if > 0",
+        'parcels_dir': str(parcels_dir),
+        'note': 'Masks overlap where parcels overlap; the Fig. 1b panel instead lets later '
+                'regions win (scenes < loc < vwfa < faces).',
+        'regions': {},
+        'parcels': {},
+    }
+    for hemi, side in (('L', 'left'), ('R', 'right')):
+        surf_path = fsaverage[f'pial_{side}']
+        n_vertices = len(nib.load(fsaverage[f'sulc_{side}']).darrays[0].data)
+        parcel_masks = {}
+        for region in regions:
+            region_mask = np.zeros(n_vertices, dtype=bool)
+            for parcel_name in region[f'parcels_{hemi}']:
+                parcel = parcel_name.split('.', 1)[1]
+                if parcel not in parcel_masks:
+                    parcel_masks[parcel] = project_parcel(parcel_name, surf_path, parcels_dir)
+                region_mask |= parcel_masks[parcel]
+            key = f'roi-{region["name"]}_hemi-{hemi}'
+            arrays[key] = region_mask
+            save_mask_gifti(region_mask, output_dir / f'roi-{region["name"]}_space-{space}_hemi-{hemi}_mask.func.gii')
+            entry = manifest['regions'].setdefault(region['name'], {
+                'label': region['label'], 'parcels_L': region['parcels_L'],
+                'parcels_R': region['parcels_R'], 'n_vertices': {}})
+            entry['n_vertices'][hemi] = int(region_mask.sum())
+            logger.info(f'  {region["label"]} ({hemi}H): {int(region_mask.sum())} vertices')
+        for parcel, mask in parcel_masks.items():
+            arrays[f'parcel-{parcel}_hemi-{hemi}'] = mask
+            save_mask_gifti(mask, output_dir / f'parcel-{parcel}_space-{space}_hemi-{hemi}_mask.func.gii')
+            manifest['parcels'].setdefault(parcel, {})[hemi] = int(mask.sum())
+
+    np.savez_compressed(output_dir / f'roi_masks_space-{space}.npz', **arrays)
+    (output_dir / f'roi_masks_space-{space}.json').write_text(json.dumps(manifest, indent=2) + '\n')
+    return manifest
+
+
 def build_parser():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--output-dir', required=True, help='Where to write the HTML maps + legend.')
@@ -217,6 +296,9 @@ def build_parser():
                    help='Surface space (default: fsaverage6, as published).')
     p.add_argument('--no-loc', action='store_true', help='Leave out the LOC (objects) region.')
     p.add_argument('--no-contours', action='store_true', help='No black region boundaries.')
+    p.add_argument('--masks-only', action='store_true',
+                   help='Write binary surface masks (every region incl. LOC and bodies/EBA, and '
+                        'every parcel) instead of the figure; see save_roi_masks.')
     return p
 
 
@@ -231,6 +313,12 @@ def main(argv=None) -> list:
         parcels_dir = Path(args.parcels_dir)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.masks_only:
+        logger.info(f'Masks | {args.space} | {parcels_dir} -> {output_dir}')
+        save_roi_masks(output_dir, parcels_dir, datasets.fetch_surf_fsaverage(mesh=args.space),
+                       args.space)
+        return sorted(output_dir.glob(f'*_space-{args.space}*'))
 
     roi_defs = select_rois(include_loc=not args.no_loc)
     tag = roi_tag(roi_defs)

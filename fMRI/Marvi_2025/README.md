@@ -50,6 +50,9 @@ FreeSurfer recon-all + CVS `.m3z` warps. Resolves via `--derivatives-root`.
 python make_figures.py --input-source precomputed --derivatives-root <DIR>
 # Fig. 1b brain panel only: atlas-only, no cut needed (fetches fsaverage6 via nilearn on first use)
 python make_figures.py --figures fig1b_parcels
+# The same parcels as binary fsaverage6 masks (GIFTI + one .npz + a JSON of vertex counts): one
+# per region (scenes, loc, vwfa, faces, bodies/EBA) and per parcel, overlaps kept
+python analysis/plot_figure_1b_parcels.py --masks-only --output-dir <DIR>
 ```
 
 **Anatomical parcels are vendored (standalone).** Branch A (fROI definition) needs the
