@@ -62,7 +62,7 @@ if __name__ == "__main__":
     # overrides per run. (The unified map in selectivity/plot.py keeps its CATEGORICAL
     # palette -- one hue per category is the whole point there.)
     CMAPS = {"vision": "viridis", "audio": "viridis",
-             "language": "viridis", "cognitive": "viridis"}
+             "language": "viridis", "cognitive": "viridis", "all": "viridis"}
 
     parser = argparse.ArgumentParser(
         description="Single-category t-value map: the top-k%% islands in colour, everything "
@@ -70,8 +70,16 @@ if __name__ == "__main__":
     parser.add_argument("--results-dir",
                         default=f"{os.getenv('SAVE_DIR', 'results')}/topo-omni",
                         help="directory holding <category>/<category><suffix>_selectivity_stats.pkl")
-    parser.add_argument("--category", default="faces", choices=sorted(MODALITY),
-                        help="the one category to draw")
+    parser.add_argument("--category", default="faces",
+                        help="the one category to draw: a localizer in MODALITY, or any "
+                             "other stats directory name when --modality is given (e.g. "
+                             "the spacetop_cluster_<id> maps from "
+                             "spacetop_discovery/cluster_maps.py)")
+    parser.add_argument("--modality", default=None,
+                        choices=["vision", "audio", "language", "cognitive", "all"],
+                        help="anatomical band to rank top-k in. Default: the category's "
+                             "entry in MODALITY. 'all' ranks over the whole sheet, for "
+                             "audiovisual contrasts that are not tied to one band.")
     parser.add_argument("--stats-suffix", default="_even",
                         help="stats filename suffix: <cat><suffix>_selectivity_stats.pkl. "
                              "Default '_even' is the odd/even-split sweep. A SMOOTHED "
@@ -98,12 +106,26 @@ if __name__ == "__main__":
                         help="draw the N largest components instead of just one. Overrides "
                              "--all-islands. A category with fewer than N surviving islands "
                              "draws all it has.")
+    parser.add_argument("--island-scores", default=None,
+                        help="island-score JSON for --island-rank corrected, written by "
+                             "spacetop_discovery/cluster_null.py for the same stats file")
+    parser.add_argument("--island-rank", default="size", choices=["size", "mass", "corrected"],
+                        help="which islands --n-islands keeps. 'size' (default): the N "
+                             "largest. 'mass': the N with the largest cluster mass, i.e. "
+                             "size x mean t = the summed t over the island, so an island "
+                             "must be both large and strongly selective to rank high. "
+                             "'corrected': mass with size divided by the chance-island size "
+                             "at that depth (--island-scores), so deep layers' larger "
+                             "spatial-loss radius does not win by itself.")
     parser.add_argument("--no-svg", action="store_true", help="write only the PNG")
     parser.add_argument("--out-dir", default=None,
                         help="where to write (default: <results-dir>/<category>)")
     args = parser.parse_args()
 
-    modality = MODALITY[args.category]
+    modality = args.modality or MODALITY.get(args.category)
+    if modality is None:
+        parser.error(f"--category {args.category!r} has no default modality; pass --modality "
+                     f"(known localizers: {', '.join(sorted(MODALITY))})")
     selectivity = [(args.category, modality, args.cmap or CMAPS[modality])]
 
     dirpath = args.results_dir
@@ -171,6 +193,8 @@ if __name__ == "__main__":
                 band[THK:, MID:] = True
             elif modality == "vision":
                 band[THK:, :MID] = True
+            elif modality == "all":
+                band[:] = True
             else:
                 raise SystemExit(f"no anatomical band for modality {modality!r}")
             t_values[~band] = np.nan
@@ -187,6 +211,8 @@ if __name__ == "__main__":
                 total_num_units = SHEET.encoder_rows * (SHEET.n_col // 2)
             elif modality == "vision":
                 total_num_units = SHEET.encoder_rows * (SHEET.n_col // 2)
+            elif modality == "all":
+                total_num_units = H * W
         else:
             total_num_units = H * W
 
@@ -228,12 +254,41 @@ if __name__ == "__main__":
                 f"or drop the morphological clean.")
         # island_stats() sorts by size descending, so the first N are the N largest.
         # --n-islands wins over --all-islands.
+        if args.island_rank == "corrected":
+            if not args.island_scores:
+                parser.error("--island-rank corrected needs --island-scores")
+            with open(args.island_scores) as _f:
+                _sc = {d["id"]: d for d in json.load(_f)["islands"]}
+            for d in stats_islands:
+                s_ = _sc.get(int(d["id"]))
+                # the JSON must describe THIS map's islands, not a re-run with other settings
+                if s_ is None or s_["size"] != d["size"]:
+                    raise SystemExit(f"island {d['id']} (size {d['size']}) does not match "
+                                     f"{args.island_scores}; regenerate it for this map")
+                d["corrected_mass"], d["p_fwe"] = s_["corrected_mass"], s_["p_fwe"]
+            stats_islands.sort(key=lambda d: d["corrected_mass"], reverse=True)
+            print("  ranked by depth-corrected mass:")
+            for r, d in enumerate(stats_islands[:max(args.n_islands or 1, 5)], 1):
+                print(f"    #{r}: id {d['id']}  size {d['size']}  mean t "
+                      f"{d['average_t_values']:.2f}  corrected mass {d['corrected_mass']:.1f}  "
+                      f"p_FWE {d['p_fwe']:.3f}")
+        if args.island_rank == "mass":
+            for d in stats_islands:
+                d["mass"] = float(d["size"] * d["average_t_values"])
+            stats_islands.sort(key=lambda d: d["mass"], reverse=True)
+            print("  ranked by cluster mass (size x mean t):")
+            for r, d in enumerate(stats_islands[:max(args.n_islands or 1, 5)], 1):
+                print(f"    #{r}: id {d['id']}  size {d['size']}  mean t "
+                      f"{d['average_t_values']:.2f}  mass {d['mass']:.0f}  centroid "
+                      f"({d['centroid'][0]:.0f},{d['centroid'][1]:.0f})")
         _n_keep = args.n_islands if args.n_islands else (None if args.all_islands else 1)
         if _n_keep:
             kept = stats_islands[:_n_keep]
             mask_labeled = keep_only_ids(mask_labeled, [d["id"] for d in kept])
-            _what = ("ONLY the largest island" if len(kept) == 1
-                     else f"the {len(kept)} largest islands")
+            _by = {"size": "largest", "mass": "highest-mass",
+                   "corrected": "highest depth-corrected-mass"}[args.island_rank]
+            _what = (f"ONLY the {_by} island" if len(kept) == 1
+                     else f"the {len(kept)} {_by} islands")
             print(f"  drawing {_what}: {', '.join(str(d['size']) for d in kept)} units "
                   f"(of {len(stats_islands)} components)")
         else:
@@ -244,6 +299,10 @@ if __name__ == "__main__":
         # single-island default keeps it. Other counts get their own name rather than
         # overwriting that pickle with a different mask under the same label.
         _isl_name = "largest" if _n_keep == 1 else (f"top{_n_keep}" if _n_keep else "all")
+        if args.island_rank != "size" and _n_keep:
+            # its own name: a mass-ranked mask must not overwrite the size-ranked one that
+            # ablation/run.py and earlier figures read
+            _isl_name = f"top{_n_keep}{args.island_rank}"
         writepath = f"{dirpath}/{category}/cluster_selectivity_{category}_t_values_top{top_k_pct}_island={_isl_name}_mask.pkl"
         dump_pickle(mask_labeled, writepath)
 
@@ -318,7 +377,7 @@ if __name__ == "__main__":
         ax.set_xticks([])
         ax.set_yticks([])
 
-        _isl_tag = "" if _n_keep == 1 else f"_island={_isl_name}"
+        _isl_tag = "" if (_n_keep == 1 and args.island_rank == "size") else f"_island={_isl_name}"
         if top_k_pct <= 0 or top_k_pct > 100:
             savepath = f"{dirpath}/{category}/cluster_selectivity_{category}_t_values_p{p_value_threshold}_anatomical={anatomical_constraint}_filternonsig={filter_out_non_significant}{_isl_tag}"
         else:

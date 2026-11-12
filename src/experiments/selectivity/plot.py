@@ -128,6 +128,14 @@ if __name__ == "__main__":
                              "instead of just one. --largest-island-only is the N=1 case "
                              "and still works; this generalises it. A category with fewer "
                              "than N surviving islands simply draws all it has.")
+    parser.add_argument("--island-rank", default="size", choices=["size", "corrected"],
+                        help="which islands --n-islands keeps per category. 'size' "
+                             "(default): the N largest. 'corrected': the N with the largest "
+                             "depth-corrected mass, (size / chance-island size at that "
+                             "depth) x mean t, read from <results-dir>/<cat>/<cat>"
+                             "<stats-suffix>_island_null.json (selectivity/island_null.py). "
+                             "The deep layers' larger spatial-loss radius makes their islands "
+                             "big by construction; this ranks against that.")
     parser.add_argument("--morph-clean", action="store_true",
                         help="apply binary_opening(3x3) + remove_small_components(20) to "
                              "the selection before labelling islands. OFF by default: on "
@@ -417,13 +425,29 @@ if __name__ == "__main__":
         # island_stats() returns islands sorted by size descending, so the first N are the
         # N largest. --n-islands wins over --largest-island-only when both are given.
         _n_keep = args.n_islands if args.n_islands else (1 if args.largest_island_only else None)
+        if args.island_rank == "corrected" and stats_islands:
+            _sp = f"{dirpath}/{category}/{category}{args.stats_suffix or ''}_island_null.json"
+            with open(_sp) as _f:
+                _sc = {d["id"]: d for d in json.load(_f)["islands"]}
+            for d in stats_islands:
+                s_ = _sc.get(int(d["id"]))
+                # the scores must describe THIS map's islands (same stats, top-k, cleaning)
+                if s_ is None or s_["size"] != d["size"]:
+                    raise SystemExit(f"{category}: island {d['id']} (size {d['size']}) does "
+                                     f"not match {_sp}; regenerate it for these settings")
+                d["corrected_mass"] = s_["corrected_mass"]
+            stats_islands.sort(key=lambda d: d["corrected_mass"], reverse=True)
+            print("  ranked by depth-corrected mass: " + ", ".join(
+                f"id {d['id']} (n={d['size']}, {d['corrected_mass']:.0f})"
+                for d in stats_islands[:_n_keep or 3]))
         kept_islands = stats_islands[:_n_keep] if (stats_islands and _n_keep) else []
 
         if kept_islands:
             mask_labeled = keep_only_ids(mask_labeled, [d["id"] for d in kept_islands])
             _sizes = ", ".join(str(d["size"]) for d in kept_islands)
-            _what = ("ONLY the largest island" if len(kept_islands) == 1
-                     else f"the {len(kept_islands)} largest islands")
+            _by = "largest" if args.island_rank == "size" else "highest depth-corrected-mass"
+            _what = (f"ONLY the {_by} island" if len(kept_islands) == 1
+                     else f"the {len(kept_islands)} {_by} islands")
             print(f"  drawing {_what}: {_sizes} units "
                   f"(of {len(stats_islands)} components)")
         elif stats_islands:
@@ -575,7 +599,8 @@ if __name__ == "__main__":
     _cat_tag = ""
     if args.categories:
         _cat_tag = "_cat=" + "-".join(t[0] for t in selectivity)
-    _islands_tag = f"_islands{_n_keep}" if _n_keep else ""
+    _islands_tag = (f"_islands{_n_keep}" + ("corrected" if args.island_rank == "corrected" else "")
+                    if _n_keep else "")
 
     if top_k_pct <= 0 or top_k_pct > 100:
         savepath = f"{out_dir}/selectivity_unified_map_t_values_p{p_value_threshold}_anatomical={anatomical_constraint}_filternonsig={filter_out_non_significant}{_islands_tag}{_cat_tag}"
