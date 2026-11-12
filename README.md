@@ -700,3 +700,22 @@ python make_all_figures.py --derivatives-root .  # STEP 2 — figures -> ./<Data
 | `qwen_omni_utils` | Multimodal preprocessing |
 | `omegaconf` | YAML config management |
 | `wandb` | Experiment tracking |
+
+---
+
+## Citation
+
+If you use Topo-Omni in your research, please cite:
+
+```bibtex
+@article{alkhamissi-mehrer-topo-omni-2026,
+  doi = {10.48550/ARXIV.2606.09770},
+  url = {https://arxiv.org/abs/2606.09770},
+  author = {AlKhamissi,  Badr and Mehrer,  Johannes and Marinov,  Lara and Abdelaal,  Ahmed and Gokce,  Abdulkadir and Schrimpf,  Martin},
+  keywords = {Neurons and Cognition (q-bio.NC),  Machine Learning (cs.LG),  FOS: Biological sciences,  FOS: Biological sciences,  FOS: Computer and information sciences,  FOS: Computer and information sciences},
+  title = {Discovering Functionally Selective Brain Regions with a Deep Topographic Multimodal Model},
+  publisher = {arXiv},
+  year = {2026},
+  copyright = {Creative Commons Attribution Share Alike 4.0 International}
+}
+```
