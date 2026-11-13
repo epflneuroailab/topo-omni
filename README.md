@@ -3,6 +3,7 @@
 [![arXiv](https://img.shields.io/badge/arXiv-2606.09770-b31b1b.svg?logo=arxiv&logoColor=white)](https://arxiv.org/abs/2606.09770)
 [![Project Page](https://img.shields.io/badge/Project%20Page-EPFL%20site-E60028.svg?logo=googlechrome&logoColor=white)](https://topo-omni.epfl.ch)
 [![Hugging Face](https://img.shields.io/badge/Hugging%20Face-Model-FFD21E.svg?logo=huggingface)](https://huggingface.co/epfl-neuroai/topo-omni)
+> **Note (13 Nov 2026):** The fMRI analyses (`fMRI/`) and their OSF components match the revised manuscript (v2). The model-side figure scripts (`scripts/figures/`, `scripts/build_precomputed_cut.py`) and the precomputed model cut (OSF component [Topo-Omni Artifacts](https://osf.io/wb2jm/)) still reproduce the initial submission (v1) figures and are being updated to the revised model by 18 Nov 2026.
 
 
 ![graphical abstract figure](data/topo-omni-graphical-abstract.png)
